@@ -26,7 +26,32 @@
 
 <!-- prettier-ignore-end -->
 
-This repository contains code for various pipelines to identify and ultimately average AMPA receptors found in cryo-electron tomograms. The project will maintain a star file that organizes the data and the output of the various pipelines. The star file will have the following sections:
+This repository contains code for various pipelines to identify and ultimately average AMPA receptors found in cryo-electron tomograms. 
+
+## Pipelines
+
+### Pipeline 1
+
+```mermaid
+graph TD;
+    etomo tomograms-->membrain membrane segmentation;
+    etomo tomograms-->findbeads gold bead annotation;
+    findbeads gold bead annotation--->greedy pair creation
+    greedy pair creation-->estimate post;
+    membrain membrane segmentation-->estimate pose;
+    estimate pose--->blender visualization;
+    findbeads gold bead annotation--->blender visualization;
+    membrain membrane segmentation--->blender visualization;
+```
+## Usage
+
+```
+finding_ampa run-pipeline1
+```
+
+## Data organization
+
+The project will maintain a star file that organizes the data and the output of the various pipelines. The star file will have the following sections:
 
 - FASettings: Cotaining setting for the project such as the path to the processing directory
 - FAData: For each tomograms containing the path to various datafiles, such as already reconstructed tomograms, movies, and potentially also annotation of experimental conditions
