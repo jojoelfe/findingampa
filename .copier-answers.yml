@@ -1,0 +1,12 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: 2023.10.27
+_src_path: gh:scientific-python/cookie
+backend: hatch
+email: jojotux123@hotmail.com
+full_name: Johannes Elferich
+license: MIT
+org: jojoelfe
+project_name: findingampa
+project_short_description: Pipeline to identify AMPA in cryo-electron tomograms
+url: https://github.com/jojoelfe/findingampa
+vcs: true
