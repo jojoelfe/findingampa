@@ -33,15 +33,15 @@ This repository contains code for various pipelines to identify and ultimately a
 ### Pipeline 1
 
 ```mermaid
-graph TD;
-    etomo tomograms-->membrain membrane segmentation;
-    etomo tomograms-->findbeads gold bead annotation;
-    findbeads gold bead annotation--->greedy pair creation
-    greedy pair creation-->estimate post;
-    membrain membrane segmentation-->estimate pose;
-    estimate pose--->blender visualization;
-    findbeads gold bead annotation--->blender visualization;
-    membrain membrane segmentation--->blender visualization;
+flowchart LR;
+    data[etomo tomograms]-->memseg[membrain membrane segmentation];
+    data-->beadsseg[findbeads gold bead annotation];
+    beadsseg--->pairs[greedy pair creation];
+    pairs-->pose[estimate post];
+    memseg-->pose;
+    pose--->vis[blender visualization];
+    beadsseg--->vis;
+    memseg--->vis;
 ```
 ## Usage
 
