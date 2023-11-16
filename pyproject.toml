@@ -29,7 +29,12 @@ classifiers = [
   "Typing :: Typed",
 ]
 dynamic = ["version"]
-dependencies = []
+dependencies = [
+ "membrain-seg@git+https://github.com/teamtomo/membrain-seg.git",
+ "scipy",
+ "imodmodel",
+ "starfile"
+]
 
 [project.optional-dependencies]
 test = [
@@ -63,6 +68,8 @@ envs.default.dependencies = [
   "pytest-cov",
 ]
 
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"
