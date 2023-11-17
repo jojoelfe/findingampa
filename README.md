@@ -53,10 +53,9 @@ finding_ampa run-pipeline1
 
 The project will maintain a star file that organizes the data and the output of the various pipelines. The star file will have the following sections:
 
-- FASettings: Cotaining setting for the project such as the path to the processing directory
-- FAData: For each tomograms containing the path to various datafiles, such as already reconstructed tomograms, movies, and potentially also annotation of experimental conditions
-- FAPipelines: List all the pipelines, with a name and a short descriptions
-- FAPipelineXSettings: Contains settings specific for Pipeline X
-- FAPipelineXData: List specific data for Pipeline X. Each row represents a tomogram
+- Settings: Cotaining setting for the project such as the path to the processing directory
+- Data: For each tomograms containing the path to various datafiles, such as already reconstructed tomograms, movies, and potentially also annotation of experimental conditions
+- PipelineXSettings: Contains settings specific for Pipeline X
+- PipelineXData: List specific data for Pipeline X. Each row represents a tomogram
 
 
