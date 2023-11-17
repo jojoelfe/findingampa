@@ -68,13 +68,21 @@ if __name__ == "__main__":
                     "rlnCoordinateX": cp[0],
                     "rlnCoordinateY": cp[1],
                     "rlnCoordinateZ": cp[2],
-                    "rlnOriginX": 0,
-                    "rlnOriginY": 0,
-                    "rlnOriginZ": 0,
+                    "rlnOriginXAngst": 0,
+                    "rlnOriginYAngst": 0,
+                    "rlnOriginZAngst": 0,
                     "rlnAngleRot": eulers[0],
                     "rlnAngleTilt": eulers[1],
                     "rlnAnglePsi": eulers[2],
+                    "rlnImagePixelSize": 1.0,
+                    "rlnMicrographName": "micrograph.mrc",
+                    "rlnOpticsGroup": 1,
                 })
-        starfile.write(pd.DataFrame(results_relion), data_folder / "relion_poses.star")
+        starfile.write({
+            'particles': pd.DataFrame(results_relion), 
+            'optics': pd.DataFrame([
+                {'rlnOpticsGroup':1}
+                ])
+        }, data_folder / "relion_poses.star")
         gold_scaled.close()
         
