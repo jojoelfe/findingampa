@@ -3,7 +3,7 @@
 
 data_Settings
 
-_FAImodPath		$IMOD_DIR
+_FAImodPath		$IMOD_DIR/bin/
 _FADataDir      /run/media/elferich/d39abcf3-672c-47a3-85bb-7798f8d15655/elferich/findingampa_data/
 
 data_Data

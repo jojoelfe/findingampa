@@ -34,7 +34,8 @@ dependencies = [
  "scipy",
  "imodmodel",
  "starfile",
- "typer"
+ "typer",
+ "matplotlib",
 ]
 
 [project.optional-dependencies]

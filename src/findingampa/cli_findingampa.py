@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import pandas as pd
 from findingampa.cli_pipeline1 import app as pipeline1_app
-
+from findingampa.project_management import Project
 
 app = typer.Typer(
 )
@@ -16,6 +16,8 @@ def version_callback(value: bool):
     if value:
         typer.echo(f"Finding AMPA Version: {__version__}")
         raise typer.Exit()
+    
+
 
 @app.callback()
 def main(
@@ -31,8 +33,9 @@ def main(
             ctx.obj = SimpleNamespace(project = None, imod_path = imod_path)
             return
     project_object = starfile.read(project,always_dict=True)
-    project_object["project_path"] = project
-    ctx.obj = SimpleNamespace(project = project_object, tomograms = project_object["Data"])
+    project_object["Data"] = project_object["Data"].apply(lambda x: x.to_dict(),axis=1).to_list()
+    project_object = Project(**project_object)
+    ctx.obj = SimpleNamespace(project = project_object, tomograms = project_object.Data, project_path = project)
 
 @app.command()
 def new_project():

@@ -16,7 +16,7 @@ try:
 
     # This will fail with LookupError if the package is not installed in
     # editable mode or if Git is not installed.
-    __version__ = get_version(root="..", relative_to=__file__)
+    __version__ = get_version(root="../..", relative_to=__file__)
 except (ImportError, LookupError):
     # As a fallback, use the version that is hard-coded in the file.
     try:

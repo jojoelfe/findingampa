@@ -5,6 +5,7 @@ from scipy.spatial import KDTree, distance
 from scipy.spatial.transform import Rotation as R
 import starfile
 import pandas as pd
+from matplotlib import pyplot as plt
 
 data_folder = Path("/run/media/elferich/d39abcf3-672c-47a3-85bb-7798f8d15655/elferich/findingampa_data/tmp/find_ampa_poses/")
 
@@ -30,8 +31,11 @@ def find_pair_centers(aunp_data):
         if pair[0] not in used_points and pair[1] not in used_points:
             exclusive_pairs.add(pair)
             used_points.update(pair)
-
-    return np.array([(coordinates[pair[0]]+coordinates[pair[1]])/2 for pair in exclusive_pairs])
+    all_pairs = tree.query_pairs(1000)
+    return (
+        np.array([(coordinates[pair[0]]+coordinates[pair[1]])/2 for pair in exclusive_pairs]),
+        np.array([distance.euclidean(coordinates[pair[0]], coordinates[pair[1]]) for pair in all_pairs]),
+    )
 
 def find_closest_point_on_membrane(centers,postsynaptic_data):
     postsynaptic_coordinates = postsynaptic_data[["x", "y", "z"]].to_numpy() * 10 
@@ -41,6 +45,8 @@ def find_closest_point_on_membrane(centers,postsynaptic_data):
 
 if __name__ == "__main__":
     # Open a txt file to write results to
+    all_distances = []
+    all_vectorlengths = []
     with open(data_folder / "results.txt", "w") as results_file:
         gold_scaled = open(data_folder / "gold_scaled.txt", "w")
         results_relion = []
@@ -50,13 +56,21 @@ if __name__ == "__main__":
             for i, a in enumerate(aunp_data[["x", "y", "z"]].to_numpy() * 10):
                 gold_scaled.write(f"{cluster_id+1} {i+1} {a[0]} {a[1]} {a[2]}\n")
             postsynaptic_data = imodmodel.read(files[1])
-            centers = np.array(find_pair_centers(aunp_data))
+            centers, distances = find_pair_centers(aunp_data)
+            all_distances.extend(distances)
+            plt.figure()
+            plt.hist(distances, bins=50)
+            plt.xlabel("Distance between AuNP pairs [A]")
+            plt.ylabel("Count")
+            plt.title(f"#AuNPs = {len(aunp_data)} #Pairs = {len(centers)}")
+            plt.savefig(data_folder / f"histogram_pairdistance_{cluster_id+1}.png")
             closest_points = find_closest_point_on_membrane(centers, postsynaptic_data)
+            vector_lengths = []
             for x, (c, cp) in enumerate(zip(centers, closest_points)):
                 results_file.write(f"{cluster_id+1} {x+1} {c[0]} {c[1]} {c[2]}\n")
                 results_file.write(f"{cluster_id+1} {x+1} {cp[0]} {cp[1]} {cp[2]}\n")
                 vector = c - cp
-
+                vector_lengths.append(np.linalg.norm(vector))
                 vector_norm = vector / np.linalg.norm(vector)
 
                 cp = cp + vector_norm * 60
@@ -78,6 +92,12 @@ if __name__ == "__main__":
                     "rlnMicrographName": "micrograph.mrc",
                     "rlnOpticsGroup": 1,
                 })
+            all_vectorlengths.extend(vector_lengths)
+            plt.figure()
+            plt.hist(vector_lengths, bins=10)
+            plt.xlabel("Distance between AuNP paircenter and membrane [A]")
+            plt.ylabel("Count")
+            plt.savefig(data_folder / f"histogram_pairtomembranedistance_{cluster_id+1}.png")
         starfile.write({
             'particles': pd.DataFrame(results_relion), 
             'optics': pd.DataFrame([
@@ -85,4 +105,13 @@ if __name__ == "__main__":
                 ])
         }, data_folder / "relion_poses.star")
         gold_scaled.close()
-        
+        plt.figure()
+        plt.hist(all_distances, bins=50)
+        plt.xlabel("Distance between AuNP pairs [A]")
+        plt.ylabel("Count")
+        plt.savefig(data_folder / f"histogram_pairdistance_all.png")
+        plt.figure()
+        plt.hist(all_vectorlengths, bins=10)
+        plt.xlabel("Distance between AuNP paircenter and membrane [A]")
+        plt.ylabel("Count")
+        plt.savefig(data_folder / f"histogram_pairtomembranedistance_all.png")
