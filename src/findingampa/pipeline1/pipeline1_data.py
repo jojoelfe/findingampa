@@ -7,15 +7,15 @@ import pandas as pd
 
 class Pipeline1Results(BaseModel):
     """Results from pipeline1."""
-    pl1PosesStarFile: Path | NoneOrNan = None
-    pl1TomogramsStarFile: Path | NoneOrNan = None
+    pl1PosesStarFile: NoneOrNan[Path] = None
+    pl1TomogramsStarFile: NoneOrNan[Path] = None
    
 
 class Pipeline1TomogramResults(BaseModel):
     """Results from pipeline1."""
     pl1TomogramId: int
-    pl1SegmentationFile: Path | NoneOrNan = None
-    pl1SegmentationContourFile: Path | NoneOrNan = None
+    pl1SegmentationFile: NoneOrNan[Path] = None
+    pl1SegmentationContourFile: NoneOrNan[Path] = None
 
 class Pipeline1ClusterRegion(BaseModel):
     pl1CluserId: int
@@ -26,10 +26,10 @@ class Pipeline1ClusterRegion(BaseModel):
     pl1Ymax: int
     pl1Zmin: int
     pl1Zmax: int
-    pl1AuNPModelfile: Path | NoneOrNan = None
-    pl1AuNPThreshold: float | NoneOrNan = None
-    pl1PresynapticObject: int | NoneOrNan = None
-    pl1PostsynapticObject: int | NoneOrNan = None
+    pl1AuNPModelfile: NoneOrNan[Path] = None
+    pl1AuNPThreshold: NoneOrNan[Path] = None
+    pl1PresynapticObject: NoneOrNan[Path] = None
+    pl1PostsynapticObject: NoneOrNan[Path] = None
     
 
 

@@ -3,10 +3,10 @@ from rich.prompt import Prompt
 app = typer.Typer()
 
 from findingampa.pipeline1.pipeline1_data import Pipeline1Data, Pipeline1TomogramResults, Pipeline1ClusterRegion
+from findingampa.project_management import FAContext
 
 
-
-def update_modelfile(ctx, data, tomogram):
+def update_modelfile(ctx: FAContext, data, tomogram):
     import pandas as pd
     import itertools
     import subprocess
@@ -37,7 +37,7 @@ def update_modelfile(ctx, data, tomogram):
 
 
 
-def create_model_file_for_subregion(ctx, tomogram, subregion, aunp_file, contour_file):
+def create_model_file_for_subregion(ctx: FAContext, tomogram, subregion, aunp_file, contour_file):
     import pandas as pd
     import colorcet as cc
     import numpy as np
@@ -84,7 +84,7 @@ def create_model_file_for_subregion(ctx, tomogram, subregion, aunp_file, contour
 
 @app.command()
 def run_pipeline1(
-    ctx: typer.Context,
+    ctx: FAContext,
     skip_subregions: bool = typer.Option(False, help="Skip subregion annotation"),
     force_contouring: bool = typer.Option(False, help="Force contouring"),
     force_findbeads: bool = typer.Option(False, help="Force findbeads"),
@@ -96,7 +96,7 @@ def run_pipeline1(
     import mrcfile
     from time import sleep
 
-    MEMBRAIN_MODEL_PATH =  Path(ctx.obj.project.Settings.FADataDir) / "static" / "MemBrain_seg_v10_alpha.ckpt"
+    MEMBRAIN_MODEL_PATH =  ctx.obj.project.Settings.FADataDir / "static" / "MemBrain_seg_v10_alpha.ckpt"
     # Step1: Annotate beads
     # In each tomogram subregions need to be annoated using xminxmax yminymax zminzmax (User rubberbadn in 3dmod)
     # ALso each subregion need an optimized threshold value
@@ -129,7 +129,7 @@ def run_pipeline1(
 
     # Assign subareas
     # Iterate over subareas, adjust threshold and confirm or set post/pre assignment
-    output_path = Path(ctx.obj.project.Settings.FADataDir) / "pipeline_data" / "pipeline1"
+    output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1"
     output_path.mkdir(parents=True, exist_ok=True)
     data_file = output_path / "pipeline1_data.star"
     if data_file.exists():

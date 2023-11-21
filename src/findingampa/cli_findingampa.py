@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import pandas as pd
 from findingampa.cli_pipeline1 import app as pipeline1_app
-from findingampa.project_management import Project
+from findingampa.project_management import Project, FAContext, FAGlobal
 
 app = typer.Typer(
 )
@@ -21,7 +21,7 @@ def version_callback(value: bool):
 
 @app.callback()
 def main(
-    ctx: typer.Context,
+    ctx: FAContext,
     project: Path = typer.Option(None, help="Path to wanted project file",rich_help_panel="Expert Options"),
     imod_path: Path = typer.Option("", help="Path to IMOD binaries"),
     version: bool = typer.Option(None, "--version", callback=version_callback, is_eager=True),
@@ -35,7 +35,7 @@ def main(
     project_object = starfile.read(project,always_dict=True)
     project_object["Data"] = project_object["Data"].apply(lambda x: x.to_dict(),axis=1).to_list()
     project_object = Project(**project_object)
-    ctx.obj = SimpleNamespace(project = project_object, tomograms = project_object.Data, project_path = project)
+    ctx.obj = FAGlobal(project = project_object, tomograms = project_object.Data, project_path = project)
 
 @app.command()
 def new_project():
