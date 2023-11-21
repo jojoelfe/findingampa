@@ -27,6 +27,9 @@ class Pipeline1ClusterRegion(BaseModel):
     pl1Zmin: int
     pl1Zmax: int
     pl1AuNPModelfile: Path | NoneOrNan = None
+    pl1AuNPThreshold: float | NoneOrNan = None
+    pl1PresynapticObject: int | NoneOrNan = None
+    pl1PostsynapticObject: int | NoneOrNan = None
     
 
 
