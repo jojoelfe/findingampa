@@ -126,6 +126,7 @@ def write_synaptic_contour_model_file(
 def run_pipeline1(
     ctx: FAContext,
     skip_subregions: bool = typer.Option(False, help="Skip subregion annotation"),
+    skip_threshold: bool = typer.Option(False, help="Skip thresholding"),
     force_contouring: bool = typer.Option(False, help="Force contouring"),
     force_findbeads: bool = typer.Option(False, help="Force findbeads"),
 ):
@@ -319,6 +320,8 @@ def run_pipeline1(
 
     # Assign threshold and pre- and post-synaptic membranes
     for subregion in data.pl1ClusterRegions.values():
+        if skip_threshold:
+            continue
         tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
         
         output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
