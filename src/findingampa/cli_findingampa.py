@@ -3,7 +3,7 @@ import starfile
 from pathlib import Path
 from types import SimpleNamespace
 import pandas as pd
-from findingampa.cli_pipeline1 import app as pipeline1_app
+from findingampa.pipeline1.cli_pipeline1 import app as pipeline1_app
 from findingampa.project_management import Project, FAContext, FAGlobal
 
 app = typer.Typer(

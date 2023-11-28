@@ -27,9 +27,15 @@ class Pipeline1ClusterRegion(BaseModel):
     pl1Zmin: int
     pl1Zmax: int
     pl1AuNPModelfile: NoneOrNan[Path] = None
-    pl1AuNPThreshold: NoneOrNan[Path] = None
-    pl1PresynapticObject: NoneOrNan[Path] = None
-    pl1PostsynapticObject: NoneOrNan[Path] = None
+    pl1AuNPThreshold: NoneOrNan[float] = None
+    pl1AuNPThresholdedModel: NoneOrNan[Path] = None
+    pl1PresynapticObjectId: NoneOrNan[int] = None
+    pl1PresynapticModel: NoneOrNan[Path] = None
+    pl1PostsynapticObjectId: NoneOrNan[int] = None
+    pl1PostsynapticModel: NoneOrNan[Path] = None
+
+    class Config:
+        validate_assignment = True
     
 
 

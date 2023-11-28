@@ -27,3 +27,9 @@ class FAGlobal(BaseModel):
 
 class FAContext(typer.Context):
     obj: Optional[FAGlobal] = None
+
+class relionMicrograph(BaseModel):
+    rlnFileName: Path
+    
+class relionParticle(BaseModel):
+    rlnOriginalParticleName: Path

@@ -5,7 +5,7 @@ from scipy.spatial import KDTree, distance
 from scipy.spatial.transform import Rotation as R
 import starfile
 import pandas as pd
-from matplotlib import pyplot as plt
+
 
 data_folder = Path("/run/media/elferich/d39abcf3-672c-47a3-85bb-7798f8d15655/elferich/findingampa_data/tmp/find_ampa_poses/")
 
@@ -43,6 +43,22 @@ def find_closest_point_on_membrane(centers,postsynaptic_data):
     return np.array([postsynaptic_coordinates[postsynaptic_tree.query(center)[1]] for center in centers])
 
 
+def plot_aunp_distances(distances, filename):
+    from matplotlib import pyplot as plt
+    plt.figure()
+    plt.hist(distances, bins=50)
+    plt.xlabel("Distance between AuNP pairs [A]")
+    plt.ylabel("Count")
+    plt.savefig(filename)
+
+def plot_aunp_distance_to_membrane(distances, filename, to):
+    from matplotlib import pyplot as plt
+    plt.figure()
+    plt.hist(distances, bins=20)
+    plt.xlabel(f"Distance between AuNP paircenter and the {to} membrane [A]")
+    plt.ylabel("Count")
+    plt.savefig(filename)
+
 if __name__ == "__main__":
     # Open a txt file to write results to
     all_distances = []
@@ -58,12 +74,7 @@ if __name__ == "__main__":
             postsynaptic_data = imodmodel.read(files[1])
             centers, distances = find_pair_centers(aunp_data)
             all_distances.extend(distances)
-            plt.figure()
-            plt.hist(distances, bins=50)
-            plt.xlabel("Distance between AuNP pairs [A]")
-            plt.ylabel("Count")
-            plt.title(f"#AuNPs = {len(aunp_data)} #Pairs = {len(centers)}")
-            plt.savefig(data_folder / f"histogram_pairdistance_{cluster_id+1}.png")
+            
             closest_points = find_closest_point_on_membrane(centers, postsynaptic_data)
             vector_lengths = []
             for x, (c, cp) in enumerate(zip(centers, closest_points)):

@@ -1,7 +1,7 @@
 from typing import Optional, Annotated, Any, TypeVar
 from math import isnan
 from pydantic import BaseModel, validator, BeforeValidator
-from pathlib import Path
+from pathlib import Path, PosixPath
 
 def coerce_nan_to_none(x: Any) -> Any:
     if x is None:
@@ -10,7 +10,7 @@ def coerce_nan_to_none(x: Any) -> Any:
         if x == 'None':
             return None
         return x
-    if type(x) is Path:
+    if type(x) is Path or type(x) is PosixPath:
         if x == 'None':
             return None
         return x
