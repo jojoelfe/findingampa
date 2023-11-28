@@ -207,7 +207,8 @@ def run_pipeline1(
         membrain_automod_file = membrain_output_path / "membrain_automod.mod"
 
         run(f"{ctx.obj.project.Settings.FAImodPath}/clip rotx {data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationFile} {segment_rotx}", shell=True)
-        run(f"{ctx.obj.project.Settings.FAImodPath}/imodauto -h 1.1 {segment_rotx} {membrain_automod_file}", shell=True)
+        run(f"{ctx.obj.project.Settings.FAImodPath}/imodauto -n -E 1.0 -u {segment_rotx} {membrain_automod_file}", shell=True)
+        run(f"{ctx.obj.project.Settings.FAImodPath}/reducecont -sp 1.0 {membrain_automod_file} {membrain_automod_file}", shell=True)
         run(f"{ctx.obj.project.Settings.FAImodPath}/imodmesh {membrain_automod_file}", shell=True)
         membrain_surfaces_file_rotx = membrain_output_path / "membrain_surfaces_rotx.mod"
         membrain_surfaces_file = membrain_output_path / "membrain_surfaces.mod"
@@ -407,9 +408,9 @@ def run_pipeline1(
             import numpy as np
             from scipy.spatial.transform import Rotation as R
             import starfile
-            aunp_data = pd.read_csv(subregion.pl1AuNPThresholdedModel, delim_whitespace=True, header=None, names=["ob","c","x","y","z","v"])
-            postsynaptic_data = pd.read_csv(subregion.pl1PostsynapticModel, delim_whitespace=True, header=None, names=["ob","c","x","y","z"])
-            presynaptic_data = pd.read_csv(subregion.pl1PresynapticModel, delim_whitespace=True, header=None, names=["ob","c","x","y","z"])
+            aunp_data = pd.read_csv(subregion.pl1AuNPThresholdedModel, delim_whitespace=True, header=None, names=["o","c","x","y","z","v"])
+            postsynaptic_data = pd.read_csv(subregion.pl1PostsynapticModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
+            presynaptic_data = pd.read_csv(subregion.pl1PresynapticModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
 
             centers, distances = find_pair_centers(aunp_data)
             all_AuNP_pair_distances.extend(distances)
@@ -519,3 +520,10 @@ def visualize_3dmod(
                 
             
 
+# fOR BLENDER:
+
+# iMODMESH CONTOURS
+# imod2vrml2 *.wrl file
+# Import to blender. Cancel rotations, scale by 0.1
+# IMport relion poses
+# Still need to figure out what to do about gold
