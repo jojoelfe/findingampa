@@ -430,16 +430,16 @@ def run_pipeline1(
                 ampa_positions.append({
                     "o": 1,
                     "c": x+1,
-                    "x": c[0],
-                    "y": c[1],
-                    "z": c[2]
+                    "x": c[0] /10,
+                    "y": c[1]/10,
+                    "z": c[2]/10
                 })
                 ampa_positions.append({
                     "o": 1,
                     "c": x+1,
-                    "x": cp[0],
-                    "y": cp[1],
-                    "z": cp[2]
+                    "x": cp[0]/10,
+                    "y": cp[1]/10,
+                    "z": cp[2]/10
                 })
                 vector_pre = c - cpre
                 vector_lengths_pre.append(np.linalg.norm(vector_pre))
@@ -466,19 +466,28 @@ def run_pipeline1(
                     "rlnImagePixelSize": 1.0,
                     "rlnMicrographName": "micrograph.mrc",
                     "rlnOpticsGroup": 1,
+                    "faVectorX": vector_norm[0],
+                    "faVectorY": vector_norm[1],
+                    "faVectorZ": vector_norm[2],
                 })
             all_AuNP_center_to_postsynaptic_distances.extend(vector_lengths_post)
             plot_aunp_distance_to_membrane(vector_lengths_post, output_path / "histogram_distancepost.png", "postsynaptic")
             all_AuNP_center_to_presynaptic_distances.extend(vector_lengths_pre)
             plot_aunp_distance_to_membrane(vector_lengths_pre, output_path / "histogram_distancepre.png", "presynaptic")
+            pd.DataFrame(ampa_positions).to_csv(output_path / "ampa_positions.txt", sep=" ", header=None, index=False, mode="w")
+            subregion.pl1AMPAPosesModel = output_path / "ampa_positions.txt"
             starfile.write({
                 'particles': pd.DataFrame(results_relion), 
                 'optics': pd.DataFrame([
                     {'rlnOpticsGroup':1}
                     ])
             }, output_path / "relion_poses.star")
+            subregion.pl1AMPAPosesStarfile = output_path / "relion_poses.star"
+            data.write(data_file)
     output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "subregions"
     plot_aunp_distances(all_AuNP_pair_distances, output_path / "histogram_pairdistance_all.png")
+    plot_aunp_distance_to_membrane(all_AuNP_center_to_postsynaptic_distances, output_path / "histogram_distancepost_all.png", "postsynaptic")
+    plot_aunp_distance_to_membrane(all_AuNP_center_to_presynaptic_distances, output_path / "histogram_distancepre_all.png", "presynaptic")
 
 @app.command()
 def visualize_3dmod(
@@ -520,7 +529,21 @@ def visualize_3dmod(
             else:   
                 color_string += " -color 255,255,255 "
         subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  {color_string} {data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile} {output_path / 'colored_contour.mod'}", shell=True)
-                
+
+        # Combined ampa poses
+        ampa_poses = []
+        max_c = 0
+        for subregion in subregions:
+            ampa_pose_data = pd.read_csv(subregion.pl1AMPAPosesModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
+            ampa_pose_data["c"] = ampa_pose_data["c"] + max_c
+            max_c = max(ampa_pose_data["c"])
+            ampa_poses.append(ampa_pose_data)
+        combined_ampa_poses = pd.concat(ampa_poses)
+        combined_ampa_poses.to_csv(output_path / "combined_ampa_poses.txt", sep=" ", header=None, index=False, mode="w")
+        subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  -color 128,0,128 {output_path / 'combined_ampa_poses.txt'} {output_path / 'combined_ampa_poses.mod'}", shell=True)
+
+        # Combine all three models
+        subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/imodjoin {output_path / 'combined_aunp.mod'} {output_path / 'colored_contour.mod'} {output_path / 'combined_ampa_poses.mod'} {output_path / 'combined_all.mod'}", shell=True)
             
 
 # fOR BLENDER:

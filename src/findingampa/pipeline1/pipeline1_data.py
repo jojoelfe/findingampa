@@ -33,6 +33,8 @@ class Pipeline1ClusterRegion(BaseModel):
     pl1PresynapticModel: NoneOrNan[Path] = None
     pl1PostsynapticObjectId: NoneOrNan[int] = None
     pl1PostsynapticModel: NoneOrNan[Path] = None
+    pl1AMPAPosesModel: NoneOrNan[Path] = None
+    pl1AMPAPosesStarfile: NoneOrNan[Path] = None
 
     class Config:
         validate_assignment = True

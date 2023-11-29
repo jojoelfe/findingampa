@@ -50,14 +50,16 @@ def plot_aunp_distances(distances, filename):
     plt.xlabel("Distance between AuNP pairs [A]")
     plt.ylabel("Count")
     plt.savefig(filename)
+    plt.close()
 
 def plot_aunp_distance_to_membrane(distances, filename, to):
     from matplotlib import pyplot as plt
     plt.figure()
-    plt.hist(distances, bins=20)
+    plt.hist(distances, bins=np.linspace(0, 300, 10))
     plt.xlabel(f"Distance between AuNP paircenter and the {to} membrane [A]")
     plt.ylabel("Count")
     plt.savefig(filename)
+    plt.close()
 
 if __name__ == "__main__":
     # Open a txt file to write results to
