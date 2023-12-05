@@ -268,8 +268,11 @@ def run_pipeline1(
                 sleep(0.1)
                 readnextline = True
                 found_rubberband = False
+                
                 while readnextline and p_3dmod.poll() is None:
                     line = p_3dmod.stderr.readline()
+                    if "OK" in line:
+                        line = p_3dmod.stderr.readline()
                     print("Down ", line)
                     if "Rubberband" in line:
                         found_rubberband = True
