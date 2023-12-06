@@ -425,9 +425,9 @@ def run_pipeline1(
             closest_points = find_closest_point_on_membrane(centers, postsynaptic_data)
             closest_points_pre = find_closest_point_on_membrane(centers, presynaptic_data)
             closest_points_post_AuNPs, postdistances = find_closest_point_on_membrane_to_AuNP(aunp_data, postsynaptic_data)
-            print(postdistances)
+            np.savetxt('AuNP_distance_to_post.txt', postdistances)
             closest_points_pre_AuNPs, predistances = find_closest_point_on_membrane_to_AuNP(aunp_data, presynaptic_data)
-            print(predistances)
+            np.savetxt('AuNP_distance_to_pre.txt', predistances)
 
             ampa_positions = []
             results_relion = []
