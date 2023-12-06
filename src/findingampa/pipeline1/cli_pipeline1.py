@@ -405,7 +405,7 @@ def run_pipeline1(
     all_AuNP_center_to_postsynaptic_distances = []
     all_AuNP_center_to_presynaptic_distances = []
     for subregion in data.pl1ClusterRegions.values():
-        from findingampa.find_ampa_poses import find_pair_centers, plot_aunp_distances, find_closest_point_on_membrane, plot_aunp_distance_to_membrane
+        from findingampa.find_ampa_poses import find_pair_centers, plot_aunp_distances, find_closest_point_on_membrane, find_closest_point_on_membrane_to_AuNP, plot_aunp_distance_to_membrane
         tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
         output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
         output_path.mkdir(parents=True, exist_ok=True)
