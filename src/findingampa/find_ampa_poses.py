@@ -47,10 +47,9 @@ def find_closest_point_on_membrane(centers,postsynaptic_data):
 
 def find_closest_point_on_membrane_to_AuNP(aunp_data,postsynaptic_data):
     coordinates = aunp_data[["x", "y", "z"]].to_numpy() * 10
-    tree = KDTree(coordinates)
     postsynaptic_coordinates = postsynaptic_data[["x", "y", "z"]].to_numpy() * 10 
     postsynaptic_tree = KDTree(postsynaptic_coordinates)
-    return np.array([postsynaptic_coordinates[postsynaptic_tree.query(AuNP)[1]] for AuNP in tree])
+    return np.array([postsynaptic_coordinates[postsynaptic_tree.query(AuNP)[1]] for AuNP in coordinates])
 
 def plot_aunp_distances(distances, filename):
     from matplotlib import pyplot as plt
