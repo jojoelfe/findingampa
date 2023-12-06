@@ -16,6 +16,8 @@ files_to_analyze = [
     [data_folder / "aunp4.mod", data_folder / "postsynaptic1.mod"],
 ]
 
+
+
 def find_pair_centers(aunp_data):
     coordinates = aunp_data[["x", "y", "z"]].to_numpy() * 10
     tree = KDTree(coordinates)
@@ -37,6 +39,7 @@ def find_pair_centers(aunp_data):
         np.array([distance.euclidean(coordinates[pair[0]], coordinates[pair[1]]) for pair in all_pairs]),
     )
 
+
 def find_closest_point_on_membrane(centers,postsynaptic_data):
     postsynaptic_coordinates = postsynaptic_data[["x", "y", "z"]].to_numpy() * 10 
     postsynaptic_tree = KDTree(postsynaptic_coordinates)
@@ -46,16 +49,17 @@ def find_closest_point_on_membrane(centers,postsynaptic_data):
 def plot_aunp_distances(distances, filename):
     from matplotlib import pyplot as plt
     plt.figure()
-    plt.hist(distances, bins=50)
+    plt.hist(distances, bins=5)
     plt.xlabel("Distance between AuNP pairs [A]")
     plt.ylabel("Count")
     plt.savefig(filename)
     plt.close()
 
+
 def plot_aunp_distance_to_membrane(distances, filename, to):
     from matplotlib import pyplot as plt
     plt.figure()
-    plt.hist(distances, bins=np.linspace(0, 300, 10))
+    plt.hist(distances, bins=np.linspace(0, 300, 60))
     plt.xlabel(f"Distance between AuNP paircenter and the {to} membrane [A]")
     plt.ylabel("Count")
     plt.savefig(filename)
@@ -107,7 +111,7 @@ if __name__ == "__main__":
                 })
             all_vectorlengths.extend(vector_lengths)
             plt.figure()
-            plt.hist(vector_lengths, bins=10)
+            plt.hist(vector_lengths, bins=5)
             plt.xlabel("Distance between AuNP paircenter and membrane [A]")
             plt.ylabel("Count")
             plt.savefig(data_folder / f"histogram_pairtomembranedistance_{cluster_id+1}.png")
@@ -119,12 +123,12 @@ if __name__ == "__main__":
         }, data_folder / "relion_poses.star")
         gold_scaled.close()
         plt.figure()
-        plt.hist(all_distances, bins=50)
+        plt.hist(all_distances, bins=5)
         plt.xlabel("Distance between AuNP pairs [A]")
         plt.ylabel("Count")
         plt.savefig(data_folder / f"histogram_pairdistance_all.png")
         plt.figure()
-        plt.hist(all_vectorlengths, bins=10)
+        plt.hist(all_vectorlengths, bins=5)
         plt.xlabel("Distance between AuNP paircenter and membrane [A]")
         plt.ylabel("Count")
         plt.savefig(data_folder / f"histogram_pairtomembranedistance_all.png")
