@@ -36,7 +36,9 @@ dependencies = [
  "starfile",
  "typer",
  "matplotlib",
- "colorcet"
+ "colorcet",
+ "mdocfile",
+ "pycistem"
 ]
 
 [project.optional-dependencies]

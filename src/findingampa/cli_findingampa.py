@@ -4,12 +4,14 @@ from pathlib import Path
 from types import SimpleNamespace
 import pandas as pd
 from findingampa.pipeline1.cli_pipeline1 import app as pipeline1_app
+from findingampa.pipeline2.cli_pipeline2 import app as pipeline2_app
 from findingampa.project_management import Project, FAContext, FAGlobal
 
 app = typer.Typer(
 )
 
 app.registered_commands += pipeline1_app.registered_commands
+app.registered_commands += pipeline2_app.registered_commands
 
 def version_callback(value: bool):
     from findingampa import __version__ 

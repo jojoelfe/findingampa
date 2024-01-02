@@ -9,6 +9,8 @@ def coerce_nan_to_none(x: Any) -> Any:
     if type(x) is str:
         if x == 'None':
             return None
+        if x == '<NA>':
+            return None
         return x
     if type(x) is Path or type(x) is PosixPath:
         if x == 'None':

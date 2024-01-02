@@ -22,6 +22,7 @@ import sqlite3
 ctffind5_info = pd.read_sql_query("SELECT IMAGE_ASSETS.IMAGE_ASSET_ID, ESTIMATED_CTF_PARAMETERS.TILT_AXIS, ESTIMATED_CTF_PARAMETERS.TILT_ANGLE FROM IMAGE_ASSETS INNER JOIN ESTIMATED_CTF_PARAMETERS ON IMAGE_ASSETS.CTF_ESTIMATION_ID=ESTIMATED_CTF_PARAMETERS.CTF_ESTIMATION_ID"
                                   , sqlite3.connect("/run/media/elferich/d39abcf3-672c-47a3-85bb-7798f8d15655/elferich/findingampa_data/tmp/cisTEM/2022/2022.db"))
 print(ctffind5_info)
+ctffind5_info = ctffind5_info.to_numpy()
 # rotation_angle_imod=86.3
 #rotation_angle_imod=88.4
 #fib_tilt=20
@@ -30,7 +31,10 @@ print(ctffind5_info)
 image_no=len(ctffind5_info[:,0])
 
 #microscope angle system:
-rawtlt=np.loadtxt(rawtltfile)
+rawtlt=pd.read_sql_query("SELECT MOVIE_ASSETS_METADATA.TILT_ANGLE FROM IMAGE_ASSETS INNER JOIN MOVIE_ASSETS_METADATA ON IMAGE_ASSETS.PARENT_MOVIE_ID=MOVIE_ASSETS_METADATA.MOVIE_ASSET_ID",
+                         sqlite3.connect("/run/media/elferich/d39abcf3-672c-47a3-85bb-7798f8d15655/elferich/findingampa_data/tmp/cisTEM/2022/2022.db"))
+rawtlt = rawtlt.to_numpy()
+rawtlt = rawtlt[:,0]
 tem_info=np.zeros(np.shape(ctffind5_info))
 tem_info[:,0]=ctffind5_info[:,0] #index
 tem_info[:,1]=0 #unknown
@@ -43,6 +47,7 @@ outliers = None
 def optim_function(x,index=None):
     global outliers
     phi_zero, theta_zero, phi_tem = x
+    print(phi_zero, theta_zero, phi_tem)
     res = []
     if index is None:
         index = range(image_no)
@@ -73,35 +78,33 @@ exp_tilt = [r.as_euler('zxz',degrees=True)[1] for r in exp_rot]
 exp_axis = [r.as_euler('zxz',degrees=True)[2] for r in exp_rot]
 exp_axis = [a+360 if a < 0 else a for a in exp_axis]
 
-import latexipy as lp
-import scienceplots
-plt.style.use(['science','scatter','ieee'])
 
-with lp.figure(f"ctftilt_lamella1_JE",tight_layout=False):
-    # genrate two plots, One for fitted alues one for errors. Te error plot should be below and have 1/4 of the height. The figure should be 8.85 cm wide.
-     
-    plt,(ax_tilt, ax_axis_angle, ax_error) = plt.subplots(3,1,figsize=(3.5,3.5),sharex=True,gridspec_kw={'height_ratios':[2,2,1]})  
-    ctffind5_data = ctffind5_info
-    outlier_mask = np.in1d(range(ctffind5_data.shape[0]), outliers)
-    no_outlier_mask = np.invert(outlier_mask)
-
-    ax_tilt.plot(rawtlt,exp_tilt,linestyle='--',color='r')
-    ax_tilt.scatter(rawtlt[no_outlier_mask],ctffind5_data[no_outlier_mask,2],marker='o')
-    ax_tilt.scatter(ctffind5_data[outliers,0],ctffind5_data[outliers,2],marker='o',color='grey')#,label='outliers')
-
-    ax_axis_angle.plot(rawtlt,exp_axis,linestyle='--',color='r',label='Overall tilt model')
-    ax_axis_angle.scatter(rawtlt[no_outlier_mask],ctffind5_info[no_outlier_mask,1],marker='x',label='Single tilt measurement')
-    ax_axis_angle.scatter(rawtlt[outliers],ctffind5_data[outliers,1],color='grey',marker='x')#,label='outliers')
+# genrate two plots, One for fitted alues one for errors. Te error plot should be below and have 1/4 of the height. The figure should be 8.85 cm wide.
     
-  
-    ax_error.scatter(rawtlt[no_outlier_mask],ctffind5_info[no_outlier_mask,2]-np.array(exp_tilt)[no_outlier_mask],marker='o')
-    ax_error.scatter(rawtlt[no_outlier_mask],ctffind5_info[no_outlier_mask,1]-np.array(exp_axis)[no_outlier_mask],marker='x',color='k')
-    ax_error.hlines(0,tem_info[0,2],tem_info[-1,2],'k',linestyles='-')
-   
+fig,(ax_tilt, ax_axis_angle, ax_error) = plt.subplots(3,1,figsize=(3.5,3.5),sharex=True,gridspec_kw={'height_ratios':[2,2,1]})  
+ctffind5_data = ctffind5_info
+outlier_mask = np.in1d(range(ctffind5_data.shape[0]), outliers)
+no_outlier_mask = np.invert(outlier_mask)
 
-    plt.subplots_adjust(hspace=0.05)
-    ax_tilt.set_ylabel('Tilt angle (°)')
-    ax_axis_angle.set_ylabel('Tilt axis angle (°)')
-    ax_error.set_ylabel('Error (°)')
-    ax_error.set_xlabel('Nominal stage tilt angle (°)')
-    ax_error.set_ylim(-12,12)
+ax_tilt.plot(rawtlt,exp_tilt,linestyle='--',color='r')
+ax_tilt.scatter(rawtlt[no_outlier_mask],ctffind5_data[no_outlier_mask,2],marker='o')
+ax_tilt.scatter(ctffind5_data[outliers,0],ctffind5_data[outliers,2],marker='o',color='grey')#,label='outliers')
+
+ax_axis_angle.plot(rawtlt,exp_axis,linestyle='--',color='r',label='Overall tilt model')
+ax_axis_angle.scatter(rawtlt[no_outlier_mask],ctffind5_info[no_outlier_mask,1],marker='x',label='Single tilt measurement')
+ax_axis_angle.scatter(rawtlt[outliers],ctffind5_data[outliers,1],color='grey',marker='x')#,label='outliers')
+
+
+ax_error.scatter(rawtlt[no_outlier_mask],ctffind5_info[no_outlier_mask,2]-np.array(exp_tilt)[no_outlier_mask],marker='o')
+ax_error.scatter(rawtlt[no_outlier_mask],ctffind5_info[no_outlier_mask,1]-np.array(exp_axis)[no_outlier_mask],marker='x',color='k')
+ax_error.hlines(0,tem_info[0,2],tem_info[-1,2],'k',linestyles='-')
+
+
+fig.subplots_adjust(hspace=0.05)
+ax_tilt.set_ylabel('Tilt angle (°)')
+ax_axis_angle.set_ylabel('Tilt axis angle (°)')
+ax_error.set_ylabel('Error (°)')
+ax_error.set_xlabel('Nominal stage tilt angle (°)')
+ax_error.set_ylim(-12,12)
+
+plt.show()
