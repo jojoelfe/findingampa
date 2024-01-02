@@ -8,6 +8,8 @@ import typer
 class Settings(BaseModel):
     FADataDir: Path
     FAImodPath: str = "$IMOD_DIR/bin"
+    FAMC2Path: str = "/groups/cryoadmin/software/MOTIONCOR2/motioncor2-1.4.2/MotionCor2_1.4.2_Cuda111-02-15-2020"
+    FACistemPath: str = "/groups/cryoadmin/software/CISTEM/je_dev/"
 
 class Tomogram(BaseModel):
     FATomogramID: int
@@ -15,6 +17,8 @@ class Tomogram(BaseModel):
     FAUnbinnedTomogram: Path
     FABin10Tomogram: Path
     FAMovies: NoneOrNan[Path] = None
+    FAMoviesGain: NoneOrNan[Path] = None
+    FAExposureDose: NoneOrNan[float] = None
 
 class Project(BaseModel):
     Settings: Settings
