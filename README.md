@@ -43,6 +43,18 @@ flowchart LR;
     beadsseg--->vis;
     memseg--->vis;
 ```
+
+### Pipeline 2
+
+- Start with movies
+- MC using motioncorr2 (get even/odd sums)
+- CTF estimation with ctffind5
+- Use apply_ctf to deconvolve images
+- USe yamiw to do patch-tracking alignment
+- Use cryo-Care for denoising
+- Use IsoNet for missing wedge correction
+
+
 ## Usage
 
 ```
