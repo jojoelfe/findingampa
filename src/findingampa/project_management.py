@@ -19,6 +19,8 @@ class Tomogram(BaseModel):
     FAMovies: NoneOrNan[Path] = None
     FAMoviesGain: NoneOrNan[Path] = None
     FAExposureDose: NoneOrNan[float] = None
+    FAPL1SkipManualSteps: bool = False
+    FAPL1ExcludeFromFinal: bool = False
 
 class Project(BaseModel):
     Settings: Settings
