@@ -18,13 +18,13 @@ files_to_analyze = [
 
 
 
-def find_pair_centers(aunp_data):
+def find_pair_centers(aunp_data, max_distance=150, optimal_distance=85):
     coordinates = aunp_data[["x", "y", "z"]].to_numpy() * 10
     tree = KDTree(coordinates)
     raw_pairs = tree.query_pairs(150)  # Find pairs with distance less than 100
 
-    # Sort pairs by distance
-    sorted_pairs = sorted(raw_pairs, key=lambda pair: distance.euclidean(coordinates[pair[0]], coordinates[pair[1]]))
+    # Sort pairs by difference of distance to optimal distance
+    sorted_pairs = sorted(raw_pairs, key=lambda pair: abs(distance.euclidean(coordinates[pair[0]], coordinates[pair[1]])-optimal_distance))
 
     # Ensure pairs are exclusive
     exclusive_pairs = set()
@@ -35,8 +35,7 @@ def find_pair_centers(aunp_data):
             used_points.update(pair)
     all_pairs = tree.query_pairs(1000)
     return (
-        np.array([(coordinates[pair[0]]+coordinates[pair[1]])/2 for pair in exclusive_pairs]),
-        np.array([distance.euclidean(coordinates[pair[0]], coordinates[pair[1]]) for pair in all_pairs]),
+        np.array([[pair[0],pair[1],*((coordinates[pair[0]]+coordinates[pair[1]])/2)] for pair in exclusive_pairs]),
     )
 
 

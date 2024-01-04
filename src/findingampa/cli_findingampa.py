@@ -38,6 +38,13 @@ def main(
     ctx.obj = FAGlobal(project = project_object, tomograms = project_object.Data, project_path = project)
 
 @app.command()
+def update_project(
+    ctx: FAContext,
+):
+    ctx.obj.project.Data = pd.DataFrame([x.model_dump() for x in ctx.obj.tomograms])
+    starfile.write(ctx.obj.project.model_dump(),Path.cwd() / "finding_ampa_project.star")
+
+@app.command()
 def new_project():
     """Create a new project file"""
     project = {

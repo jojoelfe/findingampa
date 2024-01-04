@@ -40,40 +40,13 @@ def convert_qpix_into_imod(ctx, tomogram, output_path, segmentation_file):
 
     return membrain_surfaces_file_point
 
-def update_modelfile(ctx: FAContext, data, tomogram):
-    import pandas as pd
-    import itertools
-    import subprocess
-    from pathlib import Path
-    import tempfile
-    # Generate temporary model file
-    temp_dir = tempfile.mkdtemp()
-    model_path = Path(temp_dir) / "c.mod"
-    txt_path = Path(temp_dir) / "c.txt"
-    
-    model_items = []
-    object_id = 0
-    for subregion in data.pl1ClusterRegions.values():
-        if subregion.pl1TomogramId == tomogram.FATomogramID:
-            object_id += 1
-            
-            for y in range(subregion.pl1Ymin,subregion.pl1Ymax+1):
-                model_items.append([object_id, y, subregion.pl1Xmin, y, subregion.pl1Zmin])
-                model_items.append([object_id, y, subregion.pl1Xmax, y, subregion.pl1Zmin])
-                model_items.append([object_id, y, subregion.pl1Xmax, y, subregion.pl1Zmax])
-                model_items.append([object_id, y, subregion.pl1Xmin, y, subregion.pl1Zmax])
-                
-    
-    df = pd.DataFrame(model_items, columns=["obj","con","x","y","z"])
-    df.to_csv(txt_path, sep=" ", header=None, index=False, mode="a")
-    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model {txt_path} {model_path}", shell=True)
-    return model_path
+
 
 def create_model_file_for_subregion(ctx: FAContext, 
                                     tomogram: Tomogram, 
                                     tomogram_results: Pipeline1TomogramResults,
                                     subregion: Pipeline1ClusterRegion, 
-                                    output_path: Path) -> pd.Index:
+                                    output_path: Path):
     import pandas as pd
     import colorcet as cc
     import numpy as np
@@ -136,6 +109,7 @@ def write_aunp_model_file(
         output_path: Path,
 ):
     import subprocess
+    import pandas as pd
     subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/model2point -ob -v -1 {AuNPModelfile} {output_path}" , shell=True)
     aunp_data = pd.read_csv(output_path, delim_whitespace=True, header=None, names=["ob","c","x","y","z","v"])
     print(aunp_data)
@@ -148,6 +122,8 @@ def write_synaptic_contour_model_file(
         object_id: int,
         output_path: Path,
 ):
+    import pandas as pd
+
     contour_data = pd.read_csv(ContourModelfile, delim_whitespace=True, header=None, names=["ob","c","x","y","z"])
     contour_data = contour_data[contour_data["ob"] == object_id]
     contour_data.to_csv(output_path, sep=" ", header=None, index=False, mode="w")
@@ -161,87 +137,87 @@ def estimate_ampa_poses(
     output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
     output_path.mkdir(parents=True, exist_ok=True)
     
-    if subregion.pl1AuNPThresholdedModel is not None and subregion.pl1PresynapticModel is not None and subregion.pl1PostsynapticModel is not None:
-        import numpy as np
-        from scipy.spatial.transform import Rotation as R
-        import starfile
-        aunp_data = pd.read_csv(subregion.pl1AuNPThresholdedModel, delim_whitespace=True, header=None, names=["o","c","x","y","z","v"])
-        postsynaptic_data = pd.read_csv(subregion.pl1PostsynapticModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
-        presynaptic_data = pd.read_csv(subregion.pl1PresynapticModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
+    import numpy as np
+    from scipy.spatial.transform import Rotation as R
+    import starfile
+    import pandas as pd
+    aunp_data = pd.read_csv(subregion.pl1AuNPThresholdedModel, delim_whitespace=True, header=None, names=["o","c","x","y","z","v"])
+    postsynaptic_data = pd.read_csv(subregion.pl1PostsynapticModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
+    presynaptic_data = pd.read_csv(subregion.pl1PresynapticModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
 
-        centers, distances = find_pair_centers(aunp_data)
-        all_AuNP_pair_distances.extend(distances)
-        plot_aunp_distances(distances, output_path / "histogram_pairdistance.png")
+    pairs = find_pair_centers(aunp_data)
+    center_coordinates = pairs[:,2:]
 
-        closest_points = find_closest_point_on_membrane(centers, postsynaptic_data)
-        closest_points_pre = find_closest_point_on_membrane(centers, presynaptic_data)
-        
-        closest_points_post_AuNPs, postdistances = find_closest_point_on_membrane_to_AuNP(aunp_data, postsynaptic_data)
-        np.savetxt(f"{output_path}/{tomogram.FATomogramName}_{subregion.pl1CluserId}_AuNP_distance_to_post.txt", postdistances)
-        closest_points_pre_AuNPs, predistances = find_closest_point_on_membrane_to_AuNP(aunp_data, presynaptic_data)
-        np.savetxt(f"{output_path}/{tomogram.FATomogramName}_{subregion.pl1CluserId}_AuNP_distance_to_pre.txt", predistances)
+    closest_points = find_closest_point_on_membrane(center_coordinates, postsynaptic_data)
+    closest_points_pre = find_closest_point_on_membrane(center_coordinates, presynaptic_data)
+    
+    
+    ampa_positions = []
+    results_relion = []
+    vector_lengths_post = []
+    vector_lengths_pre = []
+    aunp_coordinates = aunp_data[["x", "y", "z"]].to_numpy() * 10
+    for x, (pair, cp, cpre) in enumerate(zip(pairs, closest_points, closest_points_pre)):
+        ampa_positions.append({
+            "o": 1,
+            "c": x+1,
+            "x": aunp_coordinates[pair[0]][0]/10,
+            "y": aunp_coordinates[pair[0]][1]/10,
+            "z": aunp_coordinates[pair[0]][2]/10
+        })
+        ampa_positions.append({
+            "o": 1,
+            "c": x+1,
+            "x": aunp_coordinates[pair[1]][0]/10,
+            "y": aunp_coordinates[pair[1]][1]/10,
+            "z": aunp_coordinates[pair[1]][2]/10
+        })
+        ampa_positions.append({
+            "o": 1,
+            "c": x+1,
+            "x": cp[0]/10,
+            "y": cp[1]/10,
+            "z": cp[2]/10
+        })
 
-        ampa_positions = []
-        results_relion = []
-        vector_lengths_post = []
-        vector_lengths_pre = []
-        for x, (c, cp, cpre) in enumerate(zip(centers, closest_points, closest_points_pre)):
-            ampa_positions.append({
-                "o": 1,
-                "c": x+1,
-                "x": c[0] /10,
-                "y": c[1]/10,
-                "z": c[2]/10
-            })
-            ampa_positions.append({
-                "o": 1,
-                "c": x+1,
-                "x": cp[0]/10,
-                "y": cp[1]/10,
-                "z": cp[2]/10
-            })
-            vector_pre = c - cpre
-            vector_lengths_pre.append(np.linalg.norm(vector_pre))
-            vector = c - cp
-            vector_lengths_post.append(np.linalg.norm(vector))
-            vector_norm = vector / np.linalg.norm(vector)
+        vector_center = pair[2:] - cp
+        vector_aunp1 = aunp_coordinates[pair[0]] - cp
+        vector_aunp2 = aunp_coordinates[pair[1]] - cp
+        vector_norm = vector / np.linalg.norm(vector)
 
-            # 60 is fudge factor to line out TMP with membrane
-            cp = cp + vector_norm * 60
-            # Get thre rotation betwen vector and [0,0,1] as a 3D eulerangle
+        # 60 is fudge factor to line out TMP with membrane
+        cp = cp + vector_norm * 60
+        # Get thre rotation betwen vector and [0,0,1] as a 3D eulerangle
 
-            rot, angle = R.align_vectors([[0, 0, 1]], [vector])
-            eulers = rot.as_euler("ZYZ", degrees=True)
-            results_relion.append({
-                "rlnCoordinateX": cp[0],
-                "rlnCoordinateY": cp[1],
-                "rlnCoordinateZ": cp[2],
-                "rlnOriginXAngst": 0,
-                "rlnOriginYAngst": 0,
-                "rlnOriginZAngst": 0,
-                "rlnAngleRot": eulers[0],
-                "rlnAngleTilt": eulers[1],
-                "rlnAnglePsi": eulers[2],
-                "rlnImagePixelSize": 1.0,
-                "rlnMicrographName": "micrograph.mrc",
-                "rlnOpticsGroup": 1,
-                "faVectorX": vector_norm[0],
-                "faVectorY": vector_norm[1],
-                "faVectorZ": vector_norm[2],
-            })
-        all_AuNP_center_to_postsynaptic_distances.extend(vector_lengths_post)
-        plot_aunp_distance_to_membrane(vector_lengths_post, output_path / "histogram_distancepost.png", "postsynaptic")
-        all_AuNP_center_to_presynaptic_distances.extend(vector_lengths_pre)
-        plot_aunp_distance_to_membrane(vector_lengths_pre, output_path / "histogram_distancepre.png", "presynaptic")
-        pd.DataFrame(ampa_positions).to_csv(output_path / "ampa_positions.txt", sep=" ", header=None, index=False, mode="w")
-        subregion.pl1AMPAPosesModel = output_path / "ampa_positions.txt"
-        starfile.write({
-            'particles': pd.DataFrame(results_relion), 
-            'optics': pd.DataFrame([
-                {'rlnOpticsGroup':1}
-                ])
-        }, output_path / "relion_poses.star")
-        subregion.pl1AMPAPosesStarfile = output_path / "relion_poses.star"
+        rot, angle = R.align_vectors([[-0.5, 0, 1],[0.5,0,1]], [vector_aunp1,vector_aunp2])
+        eulers = rot.as_euler("ZYZ", degrees=True)
+        results_relion.append({
+            "rlnCoordinateX": cp[0],
+            "rlnCoordinateY": cp[1],
+            "rlnCoordinateZ": cp[2],
+            "rlnOriginXAngst": 0,
+            "rlnOriginYAngst": 0,
+            "rlnOriginZAngst": 0,
+            "rlnAngleRot": eulers[0],
+            "rlnAngleTilt": eulers[1],
+            "rlnAnglePsi": eulers[2],
+            "rlnImagePixelSize": 1.0,
+            "rlnMicrographName": "micrograph.mrc",
+            "rlnOpticsGroup": 1,
+            "faVectorX": vector_norm[0],
+            "faVectorY": vector_norm[1],
+            "faVectorZ": vector_norm[2],
+        })
+    
+    pd.DataFrame(ampa_positions).to_csv(output_path / "ampa_positions.txt", sep=" ", header=None, index=False, mode="w")
+    subregion.pl1AMPAPosesModel = output_path / "ampa_positions.txt"
+    starfile.write({
+        'particles': pd.DataFrame(results_relion), 
+        'optics': pd.DataFrame([
+            {'rlnOpticsGroup':1}
+            ])
+    }, output_path / "relion_poses.star")
+    subregion.pl1AMPAPosesStarfile = output_path / "relion_poses.star"
 
 
 from pydantic import BaseModel
@@ -256,6 +232,11 @@ class AuNP_pair_statistic(BaseModel):
     chosen: bool = False
 
 def calculate_statistics(ctx: FAContext, subregion: Pipeline1ClusterRegion):
+    closest_points_post_AuNPs, postdistances = find_closest_point_on_membrane_to_AuNP(aunp_data, postsynaptic_data)
+    np.savetxt(f"{output_path}/{tomogram.FATomogramName}_{subregion.pl1CluserId}_AuNP_distance_to_post.txt", postdistances)
+    closest_points_pre_AuNPs, predistances = find_closest_point_on_membrane_to_AuNP(aunp_data, presynaptic_data)
+    np.savetxt(f"{output_path}/{tomogram.FATomogramName}_{subregion.pl1CluserId}_AuNP_distance_to_pre.txt", predistances)
+
     pass
 
 class relion_particle(BaseModel):

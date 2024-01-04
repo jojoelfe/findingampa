@@ -1,16 +1,13 @@
 import typer
-from rich.prompt import Prompt
+from rich import print
+from rich.panel import Panel
+from rich.text import Text
 app = typer.Typer()
 
 from findingampa.pipeline1.pipeline1_data import Pipeline1Data, Pipeline1TomogramResults, Pipeline1ClusterRegion
 from findingampa.project_management import FAContext, Tomogram
 from pathlib import Path
 import pandas as pd
-
-
-
-
-
 
 
 @app.command()
@@ -22,12 +19,13 @@ def run_pipeline1(
     from pathlib import Path
     import mrcfile
     
-    from pipeline1_steps import (
+    from findingampa.pipeline1.pipeline1_steps import (
                                     annotate_membrane, 
                                     convert_qpix_into_imod, 
-                                    run_findbeads3d
+                                    run_findbeads3d,
+                                    estimate_ampa_poses
                                     )
-    from pipeline1_steps_interactive import (
+    from findingampa.pipeline1.pipeline1_steps_interactive import (
                                     annotate_subregion,
                                     annotate_threshold_and_synaptic_membranes
                                     )
@@ -73,12 +71,21 @@ def run_pipeline1(
         data = Pipeline1Data()
         data.write(data_file)
     
+
+    message = Text("Starting pipeline1", style="bold red")
+    panel = Panel(message)
+    print(panel)
+
     # Annotate membranes
-    
+
+    print(Text("Annotating membranes", style="bold blue"))
     for tomogram in ctx.obj.tomograms:
+
         # Skip if tomogram already segmented
         if tomogram.FATomogramID in data.pl1TomogramResults and data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationFile is not None:
+            print(Text(f"In {tomogram.FATomogramName} already done", style="green"))
             continue
+        print(Text(f"In {tomogram.FATomogramName}", style="green"))
         segmentation_file = annotate_membrane(ctx, tomogram, output_path)
         
         if tomogram.FATomogramID in data.pl1TomogramResults:
@@ -88,8 +95,12 @@ def run_pipeline1(
         data.write(data_file)
 
     # Convert segmentation to contours and split into objects
-
+    print(Text("Converting membranes to imod modelfiles", style="bold blue"))
     for tomogram in ctx.obj.tomograms:
+        if tomogram.FATomogramID in data.pl1TomogramResults and data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile is not None:
+            print(Text(f"In {tomogram.FATomogramName} already done", style="green"))
+            continue
+        print(Text(f"In {tomogram.FATomogramName}", style="green"))
         membrain_surfaces_file_point = convert_qpix_into_imod(ctx, tomogram, output_path, data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationFile)
 
         data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile = membrain_surfaces_file_point
@@ -97,27 +108,37 @@ def run_pipeline1(
 
 
     # Annotate subregions
+    print(Text("Annotating subregions with AuNP beads", style="bold blue"))
+
     maxclusterid = 0
     if len(data.pl1ClusterRegions) > 0:
         maxclusterid = max(data.pl1ClusterRegions.keys())
     for tomogram in ctx.obj.tomograms:
+
         if tomogram.FAPL1SkipManualSteps:
             continue
-        annotate_subregion(ctx, tomogram, output_path, data, maxclusterid)
+        print(Text(f"In {tomogram.FATomogramName}", style="green"))
+        annotate_subregion(ctx, tomogram, output_path, data, data_file, maxclusterid)
             
     
                     
     # Run findbeads3d
+    print(Text("Running findbeads3d", style="bold blue"))
+
     for subregion in data.pl1ClusterRegions.values():
+        tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
+        print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId}", style="green"))
         run_findbeads3d(ctx, subregion, output_path)
 
+    print(Text("Selecting threshold and synaptic membranes", style="bold blue"))
     # Assign threshold and pre- and post-synaptic membranes
     for subregion in data.pl1ClusterRegions.values():
         tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
         if tomogram.FAPL1SkipManualSteps:
             continue
-        
-        annotate_threshold_and_synaptic_membranes(ctx, tomogram, data, subregion)
+        print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId}", style="green"))
+
+        annotate_threshold_and_synaptic_membranes(ctx, tomogram, data, data_file, subregion)
         
 
         #run(f"{ctx.obj.project.Settings.FAImodPath}/3dmod -L -m  -x {subregion.pl1Xmin},{subregion.pl1Xmax} -z {subregion.pl1Zmin},{subregion.pl1Zmax} -y {subregion.pl1Ymin},{subregion.pl1Ymax} {ctx.obj.project.Settings.FADataDir / tomogram.FABin10Tomogram} {ctx.obj.project.Settings.FADataDir / 'temp_model.mod'}", shell=True)
@@ -127,20 +148,21 @@ def run_pipeline1(
 
 
     for subregion in data.pl1ClusterRegions.values():
-        estimate_ampa_poses(ctx, subregion)
-        data.write(data_file)
+        if subregion.pl1AuNPThresholdedModel is not None and subregion.pl1PresynapticModel is not None and subregion.pl1PostsynapticModel is not None:
+            estimate_ampa_poses(ctx, subregion)
+            data.write(data_file)
     
-    for subregion in data.pl1ClusterRegions.values():
-        create_visualization_files(ctx, subregion)
+    #for subregion in data.pl1ClusterRegions.values():
+    #    create_visualization_files(ctx, subregion)
 
-    aunp_statistic_rows = []
-    aunp_pair_statistic_rows = []
-    relion_file_row = []
-    for subregion in data.pl1ClusterRegions.values():
-        statistic_rows.extend(calculate_statistics(ctx, subregion))
-        relion_file_row.extend(create_relion_file(ctx, subregion))
+    #aunp_statistic_rows = []
+    #aunp_pair_statistic_rows = []
+    #relion_file_row = []
+    #for subregion in data.pl1ClusterRegions.values():
+    #    statistic_rows.extend(calculate_statistics(ctx, subregion))
+    #    relion_file_row.extend(create_relion_file(ctx, subregion))
     
-    write_overall_statisitcs_and_relion_file(ctx, statistic_rows, relion_file_row)
+    #write_overall_statisitcs_and_relion_file(ctx, statistic_rows, relion_file_row)
     
     
 

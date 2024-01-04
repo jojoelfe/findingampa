@@ -2,9 +2,36 @@ from findingampa.project_management import FAContext, Tomogram
 from findingampa.pipeline1.pipeline1_data import Pipeline1Data, Pipeline1TomogramResults, Pipeline1ClusterRegion
 from pathlib import Path
 
+def update_modelfile(ctx: FAContext, data, tomogram):
+    import pandas as pd
+    import itertools
+    import subprocess
+    from pathlib import Path
+    import tempfile
+    # Generate temporary model file
+    temp_dir = tempfile.mkdtemp()
+    model_path = Path(temp_dir) / "c.mod"
+    txt_path = Path(temp_dir) / "c.txt"
+    
+    model_items = []
+    object_id = 0
+    for subregion in data.pl1ClusterRegions.values():
+        if subregion.pl1TomogramId == tomogram.FATomogramID:
+            object_id += 1
+            
+            for y in range(subregion.pl1Ymin,subregion.pl1Ymax+1):
+                model_items.append([object_id, y, subregion.pl1Xmin, y, subregion.pl1Zmin])
+                model_items.append([object_id, y, subregion.pl1Xmax, y, subregion.pl1Zmin])
+                model_items.append([object_id, y, subregion.pl1Xmax, y, subregion.pl1Zmax])
+                model_items.append([object_id, y, subregion.pl1Xmin, y, subregion.pl1Zmax])
+                
+    
+    df = pd.DataFrame(model_items, columns=["obj","con","x","y","z"])
+    df.to_csv(txt_path, sep=" ", header=None, index=False, mode="a")
+    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model {txt_path} {model_path}", shell=True)
+    return model_path
 
-
-def annotate_subregion(ctx, tomogram, output_path, data, maxclusterid):
+def annotate_subregion(ctx, tomogram, output_path, data, data_file, maxclusterid):
     import mrcfile
     from subprocess import Popen, PIPE
     from time import sleep
@@ -48,8 +75,6 @@ def annotate_subregion(ctx, tomogram, output_path, data, maxclusterid):
         
         while readnextline and p_3dmod.poll() is None:
             line = p_3dmod.stderr.readline()
-            if "OK" in line:
-                line = p_3dmod.stderr.readline()
             print("Down ", line)
             if "Rubberband" in line:
                 found_rubberband = True
@@ -84,13 +109,18 @@ def annotate_subregion(ctx, tomogram, output_path, data, maxclusterid):
                     break
 
 
-def annotate_threshold_andsynaptic_membranes(
+def annotate_threshold_and_synaptic_membranes(
         ctx: FAContext,
         tomogram: Tomogram,
         data: Pipeline1Data,
+        data_file: Path,
         subregion: Pipeline1ClusterRegion,
 ):
-    from pipeline1_steps import create_model_file_for_subregion, write_aunp_model_file, write_synaptic_contour_model_file
+    from findingampa.pipeline1.pipeline1_steps import create_model_file_for_subregion, write_aunp_model_file, write_synaptic_contour_model_file
+    from subprocess import Popen, PIPE
+    from rich.prompt import Prompt
+    import pandas as pd
+
     output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
     output_path.mkdir(parents=True, exist_ok=True)\
     
