@@ -161,16 +161,16 @@ def estimate_ampa_poses(
         ampa_positions.append({
             "o": 1,
             "c": x+1,
-            "x": aunp_coordinates[pair[0]][0]/10,
-            "y": aunp_coordinates[pair[0]][1]/10,
-            "z": aunp_coordinates[pair[0]][2]/10
+            "x": aunp_coordinates[int(pair[0])][0]/10,
+            "y": aunp_coordinates[int(pair[0])][1]/10,
+            "z": aunp_coordinates[int(pair[0])][2]/10
         })
         ampa_positions.append({
             "o": 1,
             "c": x+1,
-            "x": aunp_coordinates[pair[1]][0]/10,
-            "y": aunp_coordinates[pair[1]][1]/10,
-            "z": aunp_coordinates[pair[1]][2]/10
+            "x": aunp_coordinates[int(pair[1])][0]/10,
+            "y": aunp_coordinates[int(pair[1])][1]/10,
+            "z": aunp_coordinates[int(pair[1])][2]/10
         })
         ampa_positions.append({
             "o": 1,
@@ -181,9 +181,9 @@ def estimate_ampa_poses(
         })
 
         vector_center = pair[2:] - cp
-        vector_aunp1 = aunp_coordinates[pair[0]] - cp
-        vector_aunp2 = aunp_coordinates[pair[1]] - cp
-        vector_norm = vector / np.linalg.norm(vector)
+        vector_aunp1 = aunp_coordinates[int(pair[0])] - cp
+        vector_aunp2 = aunp_coordinates[int(pair[1])] - cp
+        vector_norm = vector_center / np.linalg.norm(vector_center)
 
         # 60 is fudge factor to line out TMP with membrane
         cp = cp + vector_norm * 60

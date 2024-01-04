@@ -34,9 +34,8 @@ def find_pair_centers(aunp_data, max_distance=150, optimal_distance=85):
             exclusive_pairs.add(pair)
             used_points.update(pair)
     all_pairs = tree.query_pairs(1000)
-    return (
-        np.array([[pair[0],pair[1],*((coordinates[pair[0]]+coordinates[pair[1]])/2)] for pair in exclusive_pairs]),
-    )
+    return np.array([[pair[0],pair[1],*((coordinates[pair[0]]+coordinates[pair[1]])/2)] for pair in exclusive_pairs])
+    
 
 
 def find_closest_point_on_membrane(centers,postsynaptic_data):
