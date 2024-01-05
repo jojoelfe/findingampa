@@ -154,8 +154,7 @@ def estimate_ampa_poses(
     
     ampa_positions = []
     results_relion = []
-    vector_lengths_post = []
-    vector_lengths_pre = []
+
     aunp_coordinates = aunp_data[["x", "y", "z"]].to_numpy() * 10
     for x, (pair, cp, cpre) in enumerate(zip(pairs, closest_points, closest_points_pre)):
         ampa_positions.append({
@@ -189,7 +188,7 @@ def estimate_ampa_poses(
         cp = cp + vector_norm * 60
         # Get thre rotation betwen vector and [0,0,1] as a 3D eulerangle
 
-        rot, angle = R.align_vectors([[-0.5, 0, 1],[0.5,0,1]], [vector_aunp1,vector_aunp2])
+        rot, _ = R.align_vectors([[-0.5, 0, 1],[0.5,0,1]], [vector_aunp1,vector_aunp2])
         eulers = rot.as_euler("ZYZ", degrees=True)
         results_relion.append({
             "rlnCoordinateX": cp[0],
