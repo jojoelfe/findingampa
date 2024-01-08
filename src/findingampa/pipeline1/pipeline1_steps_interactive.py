@@ -31,7 +31,7 @@ def update_modelfile(ctx: FAContext, data, tomogram):
     subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model {txt_path} {model_path}", shell=True)
     return model_path
 
-def annotate_subregion(ctx, tomogram, output_path, data, data_file, maxclusterid):
+def annotate_subregion(ctx, tomogram, data, data_file, maxclusterid):
     import mrcfile
     from subprocess import Popen, PIPE
     from time import sleep
@@ -54,16 +54,18 @@ def annotate_subregion(ctx, tomogram, output_path, data, data_file, maxclusterid
     while p_3dmod.poll() is None:
         sleep(0.1)
         modelfilename = update_modelfile(ctx, data, tomogram)
-        print(modelfilename)
         p_3dmod.stdin.write(f"7 {modelfilename}\n")
         sleep(0.1)
         readnextline = True
         while readnextline and p_3dmod.poll() is None:
             line = p_3dmod.stderr.readline()
+            if not modelfilename.exists():
+                print(f"none {line}")
+                line = p_3dmod.stderr.readline()
             print(f"Up {line}")
             if "OK" in line:
                 readnextline = False
-        # Wait for user to confirm
+        # Wait for Upuser to confirm
         typer.confirm("Please annotate subregions in 3dmod or close 3dmod and press enter to continue",abort=False)
         # Send commands to 3dmod
         if p_3dmod.poll() is not None:
@@ -173,18 +175,18 @@ def annotate_threshold_and_synaptic_membranes(
     p_3dmod.terminate()
     
     write_aunp_model_file(ctx=ctx,
-                            AuNPModelfile=subregion.pl1AuNPModelfile,
+                            AuNPModelfile=ctx.obj.project.Settings.FADataDir / subregion.pl1AuNPModelfile,
                             threshold=subregion.pl1AuNPThreshold,
                             output_path=output_path / "aunp.txt")
-    subregion.pl1AuNPThresholdedModel = output_path / "aunp.txt"
+    subregion.pl1AuNPThresholdedModel = (output_path / "aunp.txt").relative_to(ctx.obj.project.Settings.FADataDir)
     write_synaptic_contour_model_file(ctx=ctx,
-                                        ContourModelfile=data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile,
+                                        ContourModelfile=ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile,
                                         object_id=subregion.pl1PresynapticObjectId,
                                         output_path=output_path / "presynaptic.txt")
-    subregion.pl1PresynapticModel = output_path / "presynaptic.txt"
+    subregion.pl1PresynapticModel = (output_path / "presynaptic.txt").relative_to(ctx.obj.project.Settings.FADataDir)
     write_synaptic_contour_model_file(ctx=ctx,
-                                        ContourModelfile=data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile,
+                                        ContourModelfile=ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile,
                                         object_id=subregion.pl1PostsynapticObjectId,
                                         output_path=output_path / "postsynaptic.txt")
-    subregion.pl1PostsynapticModel = output_path / "postsynaptic.txt"
+    subregion.pl1PostsynapticModel = (output_path / "postsynaptic.txt").relative_to(ctx.obj.project.Settings.FADataDir)
     data.write(data_file)

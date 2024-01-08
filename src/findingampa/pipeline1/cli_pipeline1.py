@@ -87,7 +87,7 @@ def run_pipeline1(
             continue
         print(Text(f"In {tomogram.FATomogramName}", style="green"))
         segmentation_file = annotate_membrane(ctx, tomogram, output_path)
-        
+        segmentation_file = segmentation_file.relative_to(ctx.obj.project.Settings.FADataDir)
         if tomogram.FATomogramID in data.pl1TomogramResults:
             data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationFile = segmentation_file
         else:
@@ -101,8 +101,8 @@ def run_pipeline1(
             print(Text(f"In {tomogram.FATomogramName} already done", style="green"))
             continue
         print(Text(f"In {tomogram.FATomogramName}", style="green"))
-        membrain_surfaces_file_point = convert_qpix_into_imod(ctx, tomogram, output_path, data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationFile)
-
+        membrain_surfaces_file_point = convert_qpix_into_imod(ctx, tomogram, output_path, ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationFile)
+        membrain_surfaces_file_point = membrain_surfaces_file_point.relative_to(ctx.obj.project.Settings.FADataDir)
         data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile = membrain_surfaces_file_point
         data.write(data_file)
 
@@ -111,14 +111,14 @@ def run_pipeline1(
     print(Text("Annotating subregions with AuNP beads", style="bold blue"))
 
     maxclusterid = 0
-    if len(data.pl1ClusterRegions) > 0:
-        maxclusterid = max(data.pl1ClusterRegions.keys())
     for tomogram in ctx.obj.tomograms:
 
         if tomogram.FAPL1SkipManualSteps:
             continue
+        if len(data.pl1ClusterRegions) > 0:
+            maxclusterid = max(data.pl1ClusterRegions.keys())
         print(Text(f"In {tomogram.FATomogramName}", style="green"))
-        annotate_subregion(ctx, tomogram, output_path, data, data_file, maxclusterid)
+        annotate_subregion(ctx, tomogram, data, data_file, maxclusterid)
             
     
                     
@@ -129,6 +129,7 @@ def run_pipeline1(
         tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
         print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId}", style="green"))
         run_findbeads3d(ctx, subregion, output_path)
+        data.write(data_file)
 
     print(Text("Selecting threshold and synaptic membranes", style="bold blue"))
     # Assign threshold and pre- and post-synaptic membranes
@@ -173,55 +174,7 @@ def visualize_3dmod(
     import subprocess
     data = Pipeline1Data.read(ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "pipeline1_data.star")
     for tomogram in ctx.obj.tomograms:
-        subregions = [subregion for subregion in data.pl1ClusterRegions.values() if subregion.pl1TomogramId == tomogram.FATomogramID]
-        output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "visualization_3dmod" / f"{tomogram.FATomogramName}"
-        output_path.mkdir(parents=True, exist_ok=True)
-        # Join AuNP models
-        aunps = []
-        max_c = 0
-        for subregion in subregions:
-            aunp_data = pd.read_csv(subregion.pl1AuNPThresholdedModel, delim_whitespace=True, header=None, names=["o","c","x","y","z","v"])
-            aunp_data["c"] = aunp_data["c"] + max_c
-            max_c = max(aunp_data["c"])
-            aunps.append(aunp_data)
-        combined_aunp = pd.concat(aunps)
-        combined_aunp.to_csv(output_path / "combined_aunp.txt", sep=" ", header=None, index=False, mode="w")
-        subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  -sc -color 255,215,0 -sp 2 {output_path / 'combined_aunp.txt'} {output_path / 'combined_aunp.mod'}", shell=True)
-
-        # Color contour objects
-        contour_data  = pd.read_csv(data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
-        color_string = ""
-        for object in contour_data["o"].unique():
-            pre = False
-            post = False
-            for sr in subregions:
-                if sr.pl1PresynapticObjectId == object:
-                    pre = True     
-                elif sr.pl1PostsynapticObjectId == object:
-                    post=True
-            if pre:
-                color_string += " -color 255,0,0 "
-            elif post:
-                color_string += " -color 0,0,255 "
-            else:   
-                color_string += " -color 255,255,255 "
-        subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  {color_string} {data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile} {output_path / 'colored_contour.mod'}", shell=True)
-
-        # Combined ampa poses
-        ampa_poses = []
-        max_c = 0
-        for subregion in subregions:
-            ampa_pose_data = pd.read_csv(subregion.pl1AMPAPosesModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
-            ampa_pose_data["c"] = ampa_pose_data["c"] + max_c
-            max_c = max(ampa_pose_data["c"])
-            ampa_poses.append(ampa_pose_data)
-        combined_ampa_poses = pd.concat(ampa_poses)
-        combined_ampa_poses.to_csv(output_path / "combined_ampa_poses.txt", sep=" ", header=None, index=False, mode="w")
-        subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  -color 128,0,128 {output_path / 'combined_ampa_poses.txt'} {output_path / 'combined_ampa_poses.mod'}", shell=True)
-
-        # Combine all three models
-        subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/imodjoin {output_path / 'combined_aunp.mod'} {output_path / 'colored_contour.mod'} {output_path / 'combined_ampa_poses.mod'} {output_path / 'combined_all.mod'}", shell=True)
-            
+        continue
 
 # fOR BLENDER:
 
