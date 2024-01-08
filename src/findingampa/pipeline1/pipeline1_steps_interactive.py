@@ -124,7 +124,7 @@ def annotate_threshold_and_synaptic_membranes(
     import pandas as pd
 
     output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
-    output_path.mkdir(parents=True, exist_ok=True)\
+    output_path.mkdir(parents=True, exist_ok=True)
     
     included_objects = create_model_file_for_subregion(ctx=ctx,
                                                         tomogram=tomogram,
@@ -173,20 +173,6 @@ def annotate_threshold_and_synaptic_membranes(
     subregion.pl1PresynapticObjectId = included_objects[pre_synaptic-2]
     subregion.pl1PostsynapticObjectId = included_objects[post_synaptic-2]
     p_3dmod.terminate()
-    
-    write_aunp_model_file(ctx=ctx,
-                            AuNPModelfile=ctx.obj.project.Settings.FADataDir / subregion.pl1AuNPModelfile,
-                            threshold=subregion.pl1AuNPThreshold,
-                            output_path=output_path / "aunp.txt")
-    subregion.pl1AuNPThresholdedModel = (output_path / "aunp.txt").relative_to(ctx.obj.project.Settings.FADataDir)
-    write_synaptic_contour_model_file(ctx=ctx,
-                                        ContourModelfile=ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile,
-                                        object_id=subregion.pl1PresynapticObjectId,
-                                        output_path=output_path / "presynaptic.txt")
-    subregion.pl1PresynapticModel = (output_path / "presynaptic.txt").relative_to(ctx.obj.project.Settings.FADataDir)
-    write_synaptic_contour_model_file(ctx=ctx,
-                                        ContourModelfile=ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile,
-                                        object_id=subregion.pl1PostsynapticObjectId,
-                                        output_path=output_path / "postsynaptic.txt")
-    subregion.pl1PostsynapticModel = (output_path / "postsynaptic.txt").relative_to(ctx.obj.project.Settings.FADataDir)
     data.write(data_file)
+    
+    

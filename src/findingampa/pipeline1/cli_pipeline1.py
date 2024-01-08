@@ -23,7 +23,9 @@ def run_pipeline1(
                                     annotate_membrane, 
                                     convert_qpix_into_imod, 
                                     run_findbeads3d,
-                                    estimate_ampa_poses
+                                    estimate_ampa_poses,
+                                    prepare_aunp_and_synaptic_membrane_model,
+                                    create_visualization_files
                                     )
     from findingampa.pipeline1.pipeline1_steps_interactive import (
                                     annotate_subregion,
@@ -126,13 +128,17 @@ def run_pipeline1(
     print(Text("Running findbeads3d", style="bold blue"))
 
     for subregion in data.pl1ClusterRegions.values():
+        if subregion.pl1AuNPModelfile is not None:
+            print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId} already done", style="green"))
+            continue
         tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
         print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId}", style="green"))
         run_findbeads3d(ctx, subregion, output_path)
         data.write(data_file)
-
-    print(Text("Selecting threshold and synaptic membranes", style="bold blue"))
+    
     # Assign threshold and pre- and post-synaptic membranes
+    print(Text("Selecting threshold and synaptic membranes", style="bold blue"))
+    
     for subregion in data.pl1ClusterRegions.values():
         tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
         if tomogram.FAPL1SkipManualSteps:
@@ -144,17 +150,30 @@ def run_pipeline1(
 
         #run(f"{ctx.obj.project.Settings.FAImodPath}/3dmod -L -m  -x {subregion.pl1Xmin},{subregion.pl1Xmax} -z {subregion.pl1Zmin},{subregion.pl1Zmax} -y {subregion.pl1Ymin},{subregion.pl1Ymax} {ctx.obj.project.Settings.FADataDir / tomogram.FABin10Tomogram} {ctx.obj.project.Settings.FADataDir / 'temp_model.mod'}", shell=True)
 
+    # Prepare AuNP and Synaptic Membrane Model
+    print(Text("Preparing AuNP and synaptic membrane model", style="bold blue"))
+    for subregion in data.pl1ClusterRegions.values():
+        tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
+        print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId}", style="green"))
+        prepare_aunp_and_synaptic_membrane_model(ctx, subregion,tomogram, data)
+        data.write(data_file)
+    
     # Define potential AMPA poses
-
-
-
+    print(Text("Defining potential AMPA poses", style="bold blue"))
     for subregion in data.pl1ClusterRegions.values():
         if subregion.pl1AuNPThresholdedModel is not None and subregion.pl1PresynapticModel is not None and subregion.pl1PostsynapticModel is not None:
+            tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
+            print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId}", style="green"))
             estimate_ampa_poses(ctx, subregion)
             data.write(data_file)
     
-    #for subregion in data.pl1ClusterRegions.values():
-    #    create_visualization_files(ctx, subregion)
+    # Create files for visualization in blender
+    print(Text("Creating files for visualization in blender", style="bold blue"))
+    for tomogram in ctx.obj.tomograms:
+        print(Text(f"In {tomogram.FATomogramName}", style="green"))
+        open_command = create_visualization_files(ctx, tomogram, data)
+        print(Text(f"Open using 3dmod", style="yellow"))
+        print(open_command)
 
     #aunp_statistic_rows = []
     #aunp_pair_statistic_rows = []

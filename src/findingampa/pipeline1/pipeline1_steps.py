@@ -98,7 +98,7 @@ def run_findbeads3d(ctx: FAContext, subregion: Pipeline1ClusterRegion, output_pa
     beads_model_file_dir.mkdir(parents=True, exist_ok=True)
     beads_model_file = beads_model_file_dir / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}.mod"
     beads_point_file = beads_model_file_dir / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}.txt"
-    run(f"{ctx.obj.project.Settings.FAImodPath}/findbeads3d -inp {ctx.obj.project.Settings.FADataDir / tomogram.FABin10Tomogram}  -si 1.5 -a -50,50 -yl -thresh 30 -sto 0.5 -o {beads_model_file} -x {subregion.pl1Xmin},{subregion.pl1Xmax} -z {subregion.pl1Zmin},{subregion.pl1Zmax} -yminmax {subregion.pl1Ymin},{subregion.pl1Ymax}", shell=True)
+    run(f"{ctx.obj.project.Settings.FAImodPath}/findbeads3d -inp {ctx.obj.project.Settings.FADataDir / tomogram.FABin10Tomogram}  -si 1.5 -a -50,50 -yl -thresh 20 -sto 0.5 -o {beads_model_file} -x {subregion.pl1Xmin},{subregion.pl1Xmax} -z {subregion.pl1Zmin},{subregion.pl1Zmax} -yminmax {subregion.pl1Ymin},{subregion.pl1Ymax}", shell=True)
     run(f"{ctx.obj.project.Settings.FAImodPath}/model2point -ob -v -1 {beads_model_file} {beads_point_file}", shell=True)
     subregion.pl1AuNPModelfile = beads_model_file.relative_to(ctx.obj.project.Settings.FADataDir)
 
@@ -112,7 +112,10 @@ def write_aunp_model_file(
     import pandas as pd
     subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/model2point -ob -v -1 {ctx.obj.project.Settings.FADataDir / AuNPModelfile} {output_path}" , shell=True)
     aunp_data = pd.read_csv(output_path, delim_whitespace=True, header=None, names=["ob","c","x","y","z","v"])
+    original_length = len(aunp_data)
     aunp_data = aunp_data[aunp_data["v"] >= threshold]
+    from rich import print
+    print(f"Threshold {threshold} selected {len(aunp_data)} out of {original_length} initial picks")
     aunp_data.to_csv(output_path, sep=" ", header=None, index=False, mode="w")
 
 def write_synaptic_contour_model_file(
@@ -147,7 +150,6 @@ def estimate_ampa_poses(
     pairs = find_pair_centers(aunp_data)
     if len(pairs) == 0:
         return
-    print(pairs)
     center_coordinates = pairs[:,2:]
 
     closest_points = find_closest_point_on_membrane(center_coordinates, postsynaptic_data)
@@ -218,30 +220,32 @@ def estimate_ampa_poses(
             {'rlnOpticsGroup':1}
             ])
     }, output_path / "relion_poses.star")
-    subregion.pl1AMPAPosesStarfile = output_path / "relion_poses.star"
+    subregion.pl1AMPAPosesStarfile = (output_path / "relion_poses.star").relative_to(ctx.obj.project.Settings.FADataDir)
 
 def create_visualization_files(
     ctx: FAContext,
     tomogram: Tomogram,
     data: Pipeline1Data,
 ):
+    from subprocess import run
+    import pandas as pd
     subregions = [subregion for subregion in data.pl1ClusterRegions.values() if subregion.pl1TomogramId == tomogram.FATomogramID]
-    output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "visualization_3dmod" / f"{tomogram.FATomogramName}"
+    output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "visualization" / f"{tomogram.FATomogramName}"
     output_path.mkdir(parents=True, exist_ok=True)
     # Join AuNP models
     aunps = []
     max_c = 0
     for subregion in subregions:
-        aunp_data = pd.read_csv(subregion.pl1AuNPThresholdedModel, delim_whitespace=True, header=None, names=["o","c","x","y","z","v"])
+        aunp_data = pd.read_csv(ctx.obj.project.Settings.FADataDir / subregion.pl1AuNPThresholdedModel, delim_whitespace=True, header=None, names=["o","c","x","y","z","v"])
         aunp_data["c"] = aunp_data["c"] + max_c
         max_c = max(aunp_data["c"])
         aunps.append(aunp_data)
     combined_aunp = pd.concat(aunps)
     combined_aunp.to_csv(output_path / "combined_aunp.txt", sep=" ", header=None, index=False, mode="w")
-    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  -sc -color 255,215,0 -sp 2 {output_path / 'combined_aunp.txt'} {output_path / 'combined_aunp.mod'}", shell=True)
+    run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  -sc -color 255,215,0 -sp 2 {output_path / 'combined_aunp.txt'} {output_path / 'combined_aunp.mod'}", shell=True)
 
     # Color contour objects
-    contour_data  = pd.read_csv(data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
+    contour_data  = pd.read_csv(ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
     color_string = ""
     for object in contour_data["o"].unique():
         pre = False
@@ -257,23 +261,56 @@ def create_visualization_files(
             color_string += " -color 0,0,255 "
         else:   
             color_string += " -color 255,255,255 "
-    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  {color_string} {data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile} {output_path / 'colored_contour.mod'}", shell=True)
+    run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  {color_string} {ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile} {output_path / 'colored_contour.mod'}", shell=True)
 
     # Combined ampa poses
     ampa_poses = []
     max_c = 0
     for subregion in subregions:
-        ampa_pose_data = pd.read_csv(subregion.pl1AMPAPosesModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
+        ampa_pose_data = pd.read_csv(ctx.obj.project.Settings.FADataDir / subregion.pl1AMPAPosesModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
         ampa_pose_data["c"] = ampa_pose_data["c"] + max_c
         max_c = max(ampa_pose_data["c"])
         ampa_poses.append(ampa_pose_data)
     combined_ampa_poses = pd.concat(ampa_poses)
     combined_ampa_poses.to_csv(output_path / "combined_ampa_poses.txt", sep=" ", header=None, index=False, mode="w")
-    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  -color 128,0,128 {output_path / 'combined_ampa_poses.txt'} {output_path / 'combined_ampa_poses.mod'}", shell=True)
+    run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  -color 128,0,128 {output_path / 'combined_ampa_poses.txt'} {output_path / 'combined_ampa_poses.mod'}", shell=True)
 
     # Combine all three models
-    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/imodjoin {output_path / 'combined_aunp.mod'} {output_path / 'colored_contour.mod'} {output_path / 'combined_ampa_poses.mod'} {output_path / 'combined_all.mod'}", shell=True)
-            
+    run(f"{ctx.obj.project.Settings.FAImodPath}/imodjoin -i {ctx.obj.project.Settings.FADataDir / tomogram.FABin10Tomogram} {output_path / 'combined_aunp.mod'} {output_path / 'colored_contour.mod'} {output_path / 'combined_ampa_poses.mod'} {output_path / 'combined_all.mod'}", shell=True)
+    open_command = f"3dmod {ctx.obj.project.Settings.FADataDir / tomogram.FABin10Tomogram} {output_path / 'combined_all.mod'}"
+
+    # Turn AuNPs into objs file
+    run(f"imod2obj {output_path / 'combined_aunp.mod'} {output_path / 'combined_aunp.obj'}", shell=True)
+    # Make a copy of contour file, mesh it and turn it into an vrml2 files
+    run(f"cp {output_path / 'colored_contour.mod'} {output_path / 'colored_contour_mesh.mod'}", shell=True)
+    run(f"imodmesh {output_path / 'colored_contour_mesh.mod'}", shell=True)
+    run(f"imod2vrml2 {output_path / 'colored_contour_mesh.mod'} {output_path / 'colored_contour_mesh.wrl'}", shell=True)
+    return open_command
+
+def prepare_aunp_and_synaptic_membrane_model(
+        ctx: FAContext,
+        subregion: Pipeline1ClusterRegion,
+        tomogram: Tomogram,
+        data
+):
+    
+    output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
+    output_path.mkdir(parents=True, exist_ok=True)
+    write_aunp_model_file(ctx=ctx,
+                            AuNPModelfile=ctx.obj.project.Settings.FADataDir / subregion.pl1AuNPModelfile,
+                            threshold=subregion.pl1AuNPThreshold,
+                            output_path=output_path / "aunp.txt")
+    subregion.pl1AuNPThresholdedModel = (output_path / "aunp.txt").relative_to(ctx.obj.project.Settings.FADataDir)
+    write_synaptic_contour_model_file(ctx=ctx,
+                                        ContourModelfile=ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile,
+                                        object_id=subregion.pl1PresynapticObjectId,
+                                        output_path=output_path / "presynaptic.txt")
+    subregion.pl1PresynapticModel = (output_path / "presynaptic.txt").relative_to(ctx.obj.project.Settings.FADataDir)
+    write_synaptic_contour_model_file(ctx=ctx,
+                                        ContourModelfile=ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile,
+                                        object_id=subregion.pl1PostsynapticObjectId,
+                                        output_path=output_path / "postsynaptic.txt")
+    subregion.pl1PostsynapticModel = (output_path / "postsynaptic.txt").relative_to(ctx.obj.project.Settings.FADataDir)   
 
 from pydantic import BaseModel
 class AuNP_statistic(BaseModel):
@@ -295,22 +332,13 @@ def calculate_statistics(ctx: FAContext, subregion: Pipeline1ClusterRegion):
     pass
 
 class relion_particle(BaseModel):
+    rlnTomoName: str
     rlnCoordinateX: float
     rlnCoordinateY: float
     rlnCoordinateZ: float
-    rlnOriginXAngst: float
-    rlnOriginYAngst: float
-    rlnOriginZAngst: float
     rlnAngleRot: float
     rlnAngleTilt: float
     rlnAnglePsi: float
-    rlnImagePixelSize: float
-    rlnMicrographName: str
-    rlnOpticsGroup: int
-    faVectorX: float
-    faVectorY: float
-    faVectorZ: float
+    
 
-class relion_optics_group(BaseModel):
-    rlnOpticsGroup: int
     
