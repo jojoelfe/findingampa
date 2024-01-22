@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import pandas as pd
 from findingampa.pipeline1.cli_pipeline1 import app as pipeline1_app
-from findingampa.project_management import Project, FAContext, FAGlobal
+from findingampa.project_management import Project, FAContext, FAGlobal, Tomogram, RelionTomogram
 
 
 app = typer.Typer(
@@ -31,14 +31,16 @@ def main(
 ):
     """Finding AMPA processing pipeline"""
     if project is None:
-        project = Path.cwd() / "finding_ampa_project.star"
+        project = Path.cwd() / "finding_ampa" / "finding_ampa_project.star"
         if not project.exists():
-            ctx.obj = SimpleNamespace(project = None, imod_path = imod_path)
+            ctx.obj = SimpleNamespace(project = None, imod_path = imod_path, project_path = None), 
             return
     project_object = starfile.read(project,always_dict=True)
     project_object["Data"] = project_object["Data"].apply(lambda x: x.to_dict(),axis=1).to_list()
     project_object = Project(**project_object)
-    ctx.obj = FAGlobal(project = project_object, tomograms = project_object.Data, project_path = project)
+    relion_tomograms = starfile.read(project_object.Settings.FARelionTomoStar)["global"]
+    relion_tomograms = {x["rlnTomoName"]: RelionTomogram(**x) for i, x in relion_tomograms.iterrows()}
+    ctx.obj = FAGlobal(project = project_object, tomograms = project_object.Data, project_path = project, project_directory = Path.cwd() / "finding_ampa", relion_tomograms = relion_tomograms)
 
 @app.command()
 def update_project(
@@ -48,15 +50,25 @@ def update_project(
     starfile.write(ctx.obj.project.model_dump(),Path.cwd() / "finding_ampa_project.star")
 
 @app.command()
-def new_project():
+def new_project(
+    tomogram_star: Path = typer.Argument(...,help="Path to tomogram star file")
+):
     """Create a new project file"""
-    project = {
-        "Settings" : {
-            "FAImodPath" : "",
-        },
-        "Data" : pd.DataFrame(columns=["FATomogramID","FATomogramName","FAUnbinnedTomogram","FABin10Tomogram","FAMovies"]),
-    }
-    starfile.write(project,Path.cwd() / "finding_ampa_project.star")
+    if not Path.cwd().joinpath("default_pipeline.star").exists():
+        typer.echo("This does not appear to be a relion project folder, please run finding_ampa there.")
+        raise typer.Exit()
+    finding_ampa_folder = Path.cwd() / "finding_ampa"
+    finding_ampa_folder.mkdir(exist_ok=True)
+    project_file = finding_ampa_folder / "finding_ampa_project.star"
+    if project_file.exists():
+        typer.echo("Project file already exists")
+        raise typer.Exit()
+    project = Project()
+    project.Settings.FARelionTomoStar = tomogram_star
+    tomograms = starfile.read(tomogram_star)
+    for i, tomogram in tomograms["global"].iterrows():
+        project.Data.append(Tomogram(FATomogramName=tomogram["rlnTomoName"]))
+    project.write(project_file)
 
 @app.command()
 def test_centerline(
@@ -105,6 +117,9 @@ def test_centerline2(
     # Split data by contour_id and iterate over each contour
     cont_id = 1
     data["z"] = data["z"].round(0).astype(int)
+    #previous_geoms = None
+    surface_id = 1
+    previous_surfaces = []
     for z, z_data in data.groupby("z"):
 
         #plt.figure()
@@ -131,10 +146,27 @@ def test_centerline2(
         cont = linemerge(segments)
         long_enough = [a for a in cont.geoms if a.length > 10.0]
         cont = linemerge(long_enough)
+        current_surfaces = []
         for a in cont.geoms:
+            current_surface = None
+            prev_best = False
+            for p_surface_id, other in previous_surfaces:
+                intersection = a.intersection(other, grid_size=5.0)
+                if intersection.length > 0.5 * min(a.length,other.length):
+                    if prev_best:
+                        if intersection.length < prev_best:
+                            continue
+                    print(f"Found a match {intersection.length} Contour {cont_id} Surface {p_surface_id}")
+                    current_surface = p_surface_id
+                    prev_best = intersection.length
+            if current_surface is None:
+                current_surface = surface_id
+                surface_id += 1
+            current_surfaces.append((current_surface,a))
             for b in a.coords:
-                new_contour_data.append([1, cont_id, b[0], b[1], z])
+                new_contour_data.append([current_surface, cont_id, b[0], b[1], z])
             cont_id += 1
+        previous_surfaces = current_surfaces
     pd.DataFrame(new_contour_data).to_csv("temp_model.txt", sep=" ", header=None, index=False, mode="w")
             #plt.plot(*a.xy)
 

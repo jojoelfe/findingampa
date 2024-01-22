@@ -3,20 +3,20 @@ from findingampa.pipeline1.pipeline1_data import Pipeline1Data, Pipeline1Tomogra
 from pathlib import Path
 
 
-def annotate_membrane(ctx, tomogram, output_path):
+def annotate_membrane(ctx: FAContext, tomogram:Tomogram, output_path):
     from membrain_seg.segmentation.segment import segment
 
     membrain_output_path = output_path / "membrain" / tomogram.FATomogramName
     membrain_output_path.mkdir(parents=True, exist_ok=True)
-    MEMBRAIN_MODEL_PATH =  ctx.obj.project.Settings.FADataDir / "static" / "MemBrain_seg_v10_alpha.ckpt"
+    MEMBRAIN_MODEL_PATH =  ctx.obj.project_directory / "static" / "MemBrain_seg_v10_alpha.ckpt"
     segmentation_file = segment(
-        tomogram_path=ctx.obj.project.Settings.FADataDir / tomogram.FABin10Tomogram,
+        tomogram_path=ctx.obj.project_directory.parent / (ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesName[:-4] + tomogram.FAPL1TomoSuffixForMembrain),
         ckpt_path=MEMBRAIN_MODEL_PATH,
         out_folder=membrain_output_path,
     )
     return Path(segmentation_file)
 
-def convert_qpix_into_imod(ctx, tomogram, output_path, segmentation_file):
+def convert_qpix_into_imod(ctx, tomogram: Tomogram, output_path, segmentation_file):
     from subprocess import run
 
     membrain_output_path = output_path / "membrain" / tomogram.FATomogramName
@@ -52,7 +52,7 @@ def create_model_file_for_subregion(ctx: FAContext,
     import numpy as np
 
     #aunp_data = pd.read_csv(aunp_file, delim_whitespace=True, header=None, names=["ob","c","x","y","z","v"])
-    contour_data = pd.read_csv(ctx.obj.project.Settings.FADataDir / tomogram_results.pl1SegmentationContourFile, delim_whitespace=True, header=None, names=["ob","c","x","y","z"])
+    contour_data = pd.read_csv(tomogram_results.pl1SegmentationContourFile, delim_whitespace=True, header=None, names=["ob","c","x","y","z"])
 
     #contour_data["ob"] = contour_data["ob"] + 1
     contour_data["v"] = 0
@@ -86,21 +86,22 @@ def create_model_file_for_subregion(ctx: FAContext,
     # Convert to model file
     import subprocess
     subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model {output_path / 'temp_model.txt'} {output_path / 'temp_model.mod'}", shell=True)
-    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/imodjoin -c {ctx.obj.project.Settings.FADataDir / subregion.pl1AuNPModelfile}  {output_path/ 'temp_model.mod'} {output_path/ 'temp_model.mod'}", shell=True)
+    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/imodjoin -c {subregion.pl1AuNPModelfile}  {output_path/ 'temp_model.mod'} {output_path/ 'temp_model.mod'}", shell=True)
     
     return unique_objects 
 
 def run_findbeads3d(ctx: FAContext, subregion: Pipeline1ClusterRegion, output_path: Path):
     from subprocess import run
 
-    tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
+    tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramName == subregion.pl1TomogramName)
     beads_model_file_dir = (output_path / "findbeads")
     beads_model_file_dir.mkdir(parents=True, exist_ok=True)
     beads_model_file = beads_model_file_dir / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}.mod"
     beads_point_file = beads_model_file_dir / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}.txt"
-    run(f"{ctx.obj.project.Settings.FAImodPath}/findbeads3d -inp {ctx.obj.project.Settings.FADataDir / tomogram.FABin10Tomogram}  -si 1.5 -a -50,50 -yl -thresh 20 -sto 0.5 -o {beads_model_file} -x {subregion.pl1Xmin},{subregion.pl1Xmax} -z {subregion.pl1Zmin},{subregion.pl1Zmax} -yminmax {subregion.pl1Ymin},{subregion.pl1Ymax}", shell=True)
+    tomogram_path = ctx.obj.project_directory.parent / (ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesName[:-4] + tomogram.FAPL1TomoSuffixForFindbeads)
+    run(f"{ctx.obj.project.Settings.FAImodPath}/findbeads3d -inp {tomogram_path}  -si 1.5 -a -50,50 -yl -thresh 20 -sto 0.5 -o {beads_model_file} -x {subregion.pl1Xmin},{subregion.pl1Xmax} -z {subregion.pl1Zmin},{subregion.pl1Zmax} -yminmax {subregion.pl1Ymin},{subregion.pl1Ymax}", shell=True)
     run(f"{ctx.obj.project.Settings.FAImodPath}/model2point -ob -v -1 {beads_model_file} {beads_point_file}", shell=True)
-    subregion.pl1AuNPModelfile = beads_model_file.relative_to(ctx.obj.project.Settings.FADataDir)
+    subregion.pl1AuNPModelfile= beads_model_file
 
 def write_aunp_model_file(
         ctx: FAContext,
@@ -110,7 +111,7 @@ def write_aunp_model_file(
 ):
     import subprocess
     import pandas as pd
-    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/model2point -ob -v -1 {ctx.obj.project.Settings.FADataDir / AuNPModelfile} {output_path}" , shell=True)
+    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/model2point -ob -v -1 {AuNPModelfile} {output_path}" , shell=True)
     aunp_data = pd.read_csv(output_path, delim_whitespace=True, header=None, names=["ob","c","x","y","z","v"])
     original_length = len(aunp_data)
     aunp_data = aunp_data[aunp_data["v"] >= threshold]
@@ -135,17 +136,17 @@ def estimate_ampa_poses(
         subregion: Pipeline1ClusterRegion,
 ):
     from findingampa.find_ampa_poses import find_pair_centers, plot_aunp_distances, find_closest_point_on_membrane, find_closest_point_on_membrane_to_AuNP, plot_aunp_distance_to_membrane
-    tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
-    output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
+    tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramName == subregion.pl1TomogramName)
+    output_path = Path("finding_ampa") / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
     output_path.mkdir(parents=True, exist_ok=True)
     
     import numpy as np
     from scipy.spatial.transform import Rotation as R
     import starfile
     import pandas as pd
-    aunp_data = pd.read_csv(ctx.obj.project.Settings.FADataDir / subregion.pl1AuNPThresholdedModel, delim_whitespace=True, header=None, names=["o","c","x","y","z","v"])
-    postsynaptic_data = pd.read_csv(ctx.obj.project.Settings.FADataDir / subregion.pl1PostsynapticModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
-    presynaptic_data = pd.read_csv(ctx.obj.project.Settings.FADataDir / subregion.pl1PresynapticModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
+    aunp_data = pd.read_csv(subregion.pl1AuNPThresholdedModel, delim_whitespace=True, header=None, names=["o","c","x","y","z","v"])
+    postsynaptic_data = pd.read_csv(subregion.pl1PostsynapticModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
+    presynaptic_data = pd.read_csv(subregion.pl1PresynapticModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
 
     pairs = find_pair_centers(aunp_data)
     if len(pairs) == 0:
@@ -220,7 +221,6 @@ def estimate_ampa_poses(
             {'rlnOpticsGroup':1}
             ])
     }, output_path / "relion_poses.star")
-    subregion.pl1AMPAPosesStarfile = (output_path / "relion_poses.star").relative_to(ctx.obj.project.Settings.FADataDir)
 
 def create_visualization_files(
     ctx: FAContext,
@@ -229,14 +229,14 @@ def create_visualization_files(
 ):
     from subprocess import run
     import pandas as pd
-    subregions = [subregion for subregion in data.pl1ClusterRegions.values() if subregion.pl1TomogramId == tomogram.FATomogramID]
-    output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "visualization" / f"{tomogram.FATomogramName}"
+    subregions = [subregion for subregion in data.pl1ClusterRegions.values() if subregion.pl1TomogramName == tomogram.FATomogramName]
+    output_path = Path("finding_ampa") / "pipeline_data" / "pipeline1" / "visualization" / f"{tomogram.FATomogramName}"
     output_path.mkdir(parents=True, exist_ok=True)
     # Join AuNP models
     aunps = []
     max_c = 0
     for subregion in subregions:
-        aunp_data = pd.read_csv(ctx.obj.project.Settings.FADataDir / subregion.pl1AuNPThresholdedModel, delim_whitespace=True, header=None, names=["o","c","x","y","z","v"])
+        aunp_data = pd.read_csv(subregion.pl1AuNPThresholdedModel, delim_whitespace=True, header=None, names=["o","c","x","y","z","v"])
         aunp_data["c"] = aunp_data["c"] + max_c
         max_c = max(aunp_data["c"])
         aunps.append(aunp_data)
@@ -245,7 +245,7 @@ def create_visualization_files(
     run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  -sc -color 255,215,0 -sp 2 {output_path / 'combined_aunp.txt'} {output_path / 'combined_aunp.mod'}", shell=True)
 
     # Color contour objects
-    contour_data  = pd.read_csv(ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
+    contour_data  = pd.read_csv(data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationContourFile, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
     color_string = ""
     for object in contour_data["o"].unique():
         pre = False
@@ -261,13 +261,13 @@ def create_visualization_files(
             color_string += " -color 0,0,255 "
         else:   
             color_string += " -color 255,255,255 "
-    run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  {color_string} {ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile} {output_path / 'colored_contour.mod'}", shell=True)
+    run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  {color_string} {data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationContourFile} {output_path / 'colored_contour.mod'}", shell=True)
 
     # Combined ampa poses
     ampa_poses = []
     max_c = 0
     for subregion in subregions:
-        ampa_pose_data = pd.read_csv(ctx.obj.project.Settings.FADataDir / subregion.pl1AMPAPosesModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
+        ampa_pose_data = pd.read_csv(subregion.pl1AMPAPosesModel, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
         ampa_pose_data["c"] = ampa_pose_data["c"] + max_c
         max_c = max(ampa_pose_data["c"])
         ampa_poses.append(ampa_pose_data)
@@ -276,8 +276,9 @@ def create_visualization_files(
     run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  -color 128,0,128 {output_path / 'combined_ampa_poses.txt'} {output_path / 'combined_ampa_poses.mod'}", shell=True)
 
     # Combine all three models
-    run(f"{ctx.obj.project.Settings.FAImodPath}/imodjoin -i {ctx.obj.project.Settings.FADataDir / tomogram.FABin10Tomogram} {output_path / 'combined_aunp.mod'} {output_path / 'colored_contour.mod'} {output_path / 'combined_ampa_poses.mod'} {output_path / 'combined_all.mod'}", shell=True)
-    open_command = f"3dmod {ctx.obj.project.Settings.FADataDir / tomogram.FABin10Tomogram} {output_path / 'combined_all.mod'}"
+    tomogram_path= ctx.obj.project_directory.parent / (ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesName[:-4] + tomogram.FAPL1TomoSuffixForFindbeads)
+    run(f"{ctx.obj.project.Settings.FAImodPath}/imodjoin -i {tomogram_path} {output_path / 'combined_aunp.mod'} {output_path / 'colored_contour.mod'} {output_path / 'combined_ampa_poses.mod'} {output_path / 'combined_all.mod'}", shell=True)
+    open_command = f"3dmod {tomogram_path} {output_path / 'combined_all.mod'}"
 
     # Turn AuNPs into objs file
     run(f"imod2obj {output_path / 'combined_aunp.mod'} {output_path / 'combined_aunp.obj'}", shell=True)
@@ -291,26 +292,27 @@ def prepare_aunp_and_synaptic_membrane_model(
         ctx: FAContext,
         subregion: Pipeline1ClusterRegion,
         tomogram: Tomogram,
-        data
+        output_path: Path,
+        data: Pipeline1Data,
 ):
     
-    output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
+    output_path = Path("finding_ampa") / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
     output_path.mkdir(parents=True, exist_ok=True)
     write_aunp_model_file(ctx=ctx,
-                            AuNPModelfile=ctx.obj.project.Settings.FADataDir / subregion.pl1AuNPModelfile,
+                            AuNPModelfile=subregion.pl1AuNPModelfile,
                             threshold=subregion.pl1AuNPThreshold,
                             output_path=output_path / "aunp.txt")
-    subregion.pl1AuNPThresholdedModel = (output_path / "aunp.txt").relative_to(ctx.obj.project.Settings.FADataDir)
+    subregion.pl1AuNPThresholdedModel = (output_path / "aunp.txt")
     write_synaptic_contour_model_file(ctx=ctx,
-                                        ContourModelfile=ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile,
+                                        ContourModelfile=data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationContourFile,
                                         object_id=subregion.pl1PresynapticObjectId,
                                         output_path=output_path / "presynaptic.txt")
-    subregion.pl1PresynapticModel = (output_path / "presynaptic.txt").relative_to(ctx.obj.project.Settings.FADataDir)
+    subregion.pl1PresynapticModel = (output_path / "presynaptic.txt")
     write_synaptic_contour_model_file(ctx=ctx,
-                                        ContourModelfile=ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile,
+                                        ContourModelfile=data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationContourFile,
                                         object_id=subregion.pl1PostsynapticObjectId,
                                         output_path=output_path / "postsynaptic.txt")
-    subregion.pl1PostsynapticModel = (output_path / "postsynaptic.txt").relative_to(ctx.obj.project.Settings.FADataDir)   
+    subregion.pl1PostsynapticModel = (output_path / "postsynaptic.txt")
 
 from pydantic import BaseModel
 class AuNP_statistic(BaseModel):

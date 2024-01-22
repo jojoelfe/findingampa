@@ -13,13 +13,13 @@ class Pipeline1Results(BaseModel):
 
 class Pipeline1TomogramResults(BaseModel):
     """Results from pipeline1."""
-    pl1TomogramId: int
+    pl1TomogramName: str
     pl1SegmentationFile: NoneOrNan[Path] = None
     pl1SegmentationContourFile: NoneOrNan[Path] = None
 
 class Pipeline1ClusterRegion(BaseModel):
     pl1CluserId: int
-    pl1TomogramId: int
+    pl1TomogramName: str
     pl1Xmin: int 
     pl1Xmax: int
     pl1Ymin: int
@@ -44,7 +44,7 @@ class Pipeline1ClusterRegion(BaseModel):
 class Pipeline1Data(BaseModel):
     """Data to be used in pipeline1."""
     pl1Results: Pipeline1Results = Pipeline1Results()
-    pl1TomogramResults: dict[int, Pipeline1TomogramResults] = {}
+    pl1TomogramResults: dict[str, Pipeline1TomogramResults] = {}
     pl1ClusterRegions: dict[int, Pipeline1ClusterRegion] = {}
 
     @classmethod
@@ -59,7 +59,7 @@ class Pipeline1Data(BaseModel):
             pl1Results=Pipeline1Results(
                 **data['pl1Results']
             ),
-            pl1TomogramResults={row["pl1TomogramId"]: Pipeline1TomogramResults(**row) for row in data["pl1TomogramResults"].apply(lambda x: x.to_dict(),axis=1).to_list()},
+            pl1TomogramResults={row["pl1TomogramName"]: Pipeline1TomogramResults(**row) for row in data["pl1TomogramResults"].apply(lambda x: x.to_dict(),axis=1).to_list()},
             pl1ClusterRegions={row["pl1CluserId"]: Pipeline1ClusterRegion(**row) for row in data["pl1ClusterRegions"].apply(lambda x: x.to_dict(),axis=1).to_list()},
         )
     

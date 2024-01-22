@@ -64,7 +64,7 @@ def run_pipeline1(
 
     # Assign subareas
     # Iterate over subareas, adjust threshold and confirm or set post/pre assignment
-    output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1"
+    output_path = Path("finding_ampa") / "pipeline_data" / "pipeline1"
     output_path.mkdir(parents=True, exist_ok=True)
     data_file = output_path / "pipeline1_data.star"
     if data_file.exists():
@@ -84,28 +84,26 @@ def run_pipeline1(
     for tomogram in ctx.obj.tomograms:
 
         # Skip if tomogram already segmented
-        if tomogram.FATomogramID in data.pl1TomogramResults and data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationFile is not None:
+        if tomogram.FATomogramName in data.pl1TomogramResults and data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationFile is not None:
             print(Text(f"In {tomogram.FATomogramName} already done", style="green"))
             continue
         print(Text(f"In {tomogram.FATomogramName}", style="green"))
         segmentation_file = annotate_membrane(ctx, tomogram, output_path)
-        segmentation_file = segmentation_file.relative_to(ctx.obj.project.Settings.FADataDir)
-        if tomogram.FATomogramID in data.pl1TomogramResults:
-            data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationFile = segmentation_file
+        if tomogram.FATomogramName in data.pl1TomogramResults:
+            data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationFile = segmentation_file
         else:
-            data.pl1TomogramResults[tomogram.FATomogramID] = Pipeline1TomogramResults(pl1TomogramId=tomogram.FATomogramID, pl1SegmentationFile=segmentation_file)
+            data.pl1TomogramResults[tomogram.FATomogramName] = Pipeline1TomogramResults(pl1TomogramName=tomogram.FATomogramName, pl1SegmentationFile=segmentation_file)
         data.write(data_file)
 
     # Convert segmentation to contours and split into objects
     print(Text("Converting membranes to imod modelfiles", style="bold blue"))
     for tomogram in ctx.obj.tomograms:
-        if tomogram.FATomogramID in data.pl1TomogramResults and data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile is not None:
+        if tomogram.FATomogramName in data.pl1TomogramResults and data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationContourFile is not None:
             print(Text(f"In {tomogram.FATomogramName} already done", style="green"))
             continue
         print(Text(f"In {tomogram.FATomogramName}", style="green"))
-        membrain_surfaces_file_point = convert_qpix_into_imod(ctx, tomogram, output_path, ctx.obj.project.Settings.FADataDir / data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationFile)
-        membrain_surfaces_file_point = membrain_surfaces_file_point.relative_to(ctx.obj.project.Settings.FADataDir)
-        data.pl1TomogramResults[tomogram.FATomogramID].pl1SegmentationContourFile = membrain_surfaces_file_point
+        membrain_surfaces_file_point = convert_qpix_into_imod(ctx, tomogram, output_path, data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationFile)
+        data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationContourFile = membrain_surfaces_file_point
         data.write(data_file)
 
 
@@ -131,7 +129,7 @@ def run_pipeline1(
         if subregion.pl1AuNPModelfile is not None:
             print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId} already done", style="green"))
             continue
-        tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
+        tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramName == subregion.pl1TomogramName)
         print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId}", style="green"))
         run_findbeads3d(ctx, subregion, output_path)
         data.write(data_file)
@@ -140,7 +138,7 @@ def run_pipeline1(
     print(Text("Selecting threshold and synaptic membranes", style="bold blue"))
     
     for subregion in data.pl1ClusterRegions.values():
-        tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
+        tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramName == subregion.pl1TomogramName)
         if tomogram.FAPL1SkipManualSteps:
             continue
         print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId}", style="green"))
@@ -148,21 +146,19 @@ def run_pipeline1(
         annotate_threshold_and_synaptic_membranes(ctx, tomogram, data, data_file, subregion)
         
 
-        #run(f"{ctx.obj.project.Settings.FAImodPath}/3dmod -L -m  -x {subregion.pl1Xmin},{subregion.pl1Xmax} -z {subregion.pl1Zmin},{subregion.pl1Zmax} -y {subregion.pl1Ymin},{subregion.pl1Ymax} {ctx.obj.project.Settings.FADataDir / tomogram.FABin10Tomogram} {ctx.obj.project.Settings.FADataDir / 'temp_model.mod'}", shell=True)
-
     # Prepare AuNP and Synaptic Membrane Model
     print(Text("Preparing AuNP and synaptic membrane model", style="bold blue"))
     for subregion in data.pl1ClusterRegions.values():
-        tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
+        tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramName == subregion.pl1TomogramName)
         print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId}", style="green"))
-        prepare_aunp_and_synaptic_membrane_model(ctx, subregion,tomogram, data)
+        prepare_aunp_and_synaptic_membrane_model(ctx, subregion,tomogram, output_path=output_path, data=data)
         data.write(data_file)
     
     # Define potential AMPA poses
     print(Text("Defining potential AMPA poses", style="bold blue"))
     for subregion in data.pl1ClusterRegions.values():
         if subregion.pl1AuNPThresholdedModel is not None and subregion.pl1PresynapticModel is not None and subregion.pl1PostsynapticModel is not None:
-            tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramID == subregion.pl1TomogramId)
+            tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramName == subregion.pl1TomogramName)
             print(Text(f"In {tomogram.FATomogramName} subregion {subregion.pl1CluserId}", style="green"))
             estimate_ampa_poses(ctx, subregion)
             data.write(data_file)
