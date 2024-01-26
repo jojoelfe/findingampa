@@ -1,6 +1,7 @@
 from findingampa.project_management import FAContext, Tomogram
 from findingampa.pipeline1.pipeline1_data import Pipeline1Data, Pipeline1TomogramResults, Pipeline1ClusterRegion
 from pathlib import Path
+from pydantic import BaseModel
 
 
 def annotate_membrane(ctx: FAContext, tomogram:Tomogram, output_path):
@@ -131,16 +132,36 @@ def write_synaptic_contour_model_file(
     contour_data = contour_data[contour_data["ob"] == object_id]
     contour_data.to_csv(output_path, sep=" ", header=None, index=False, mode="w")
 
+class relion_particle(BaseModel):
+    rlnTomoName: str
+    rlnCoordinateX: float
+    rlnCoordinateY: float
+    rlnCoordinateZ: float
+    rlnAngleRot: float
+    rlnAngleTilt: float
+    rlnAnglePsi: float
+
 def estimate_ampa_poses(
         ctx: FAContext,
         subregion: Pipeline1ClusterRegion,
 ):
     from findingampa.find_ampa_poses import find_pair_centers, plot_aunp_distances, find_closest_point_on_membrane, find_closest_point_on_membrane_to_AuNP, plot_aunp_distance_to_membrane
+    import numpy as np
+
     tomogram = next(tomogram for tomogram in ctx.obj.tomograms if tomogram.FATomogramName == subregion.pl1TomogramName)
     output_path = Path("finding_ampa") / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
     output_path.mkdir(parents=True, exist_ok=True)
-    
-    import numpy as np
+    import mrcfile
+    tomogram_path = ctx.obj.project_directory.parent / (ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesName[:-4] + tomogram.FAPL1TomoSuffixForFindbeads)
+    with mrcfile.open(tomogram_path) as mrc:
+                ydim = mrc.header.ny
+                xdim = mrc.header.nx
+                zdim = mrc.header.nz
+    bin_factor_z = ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoSizeZ / zdim
+    bin_factor_y = ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoSizeY / ydim
+    bin_factor_x = ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoSizeX / xdim
+    binning_factor = np.mean([bin_factor_x, bin_factor_y, bin_factor_z])
+    print(binning_factor)
     from scipy.spatial.transform import Rotation as R
     import starfile
     import pandas as pd
@@ -195,22 +216,24 @@ def estimate_ampa_poses(
 
         rot, _ = R.align_vectors([[-0.5, 0, 1],[0.5,0,1]], [vector_aunp1,vector_aunp2])
         eulers = rot.as_euler("ZYZ", degrees=True)
+
+        # Get the binning factor
+        
         results_relion.append({
-            "rlnCoordinateX": cp[0],
-            "rlnCoordinateY": cp[1],
-            "rlnCoordinateZ": cp[2],
-            "rlnOriginXAngst": 0,
-            "rlnOriginYAngst": 0,
-            "rlnOriginZAngst": 0,
+            "rlnTomoName": tomogram.FATomogramName,
+            "rlnCoordinateX": (cp[0]/10) * binning_factor,
+            "rlnCoordinateY": (cp[1]/10) * binning_factor,
+            "rlnCoordinateZ": (cp[2]/10) * binning_factor,
+
             "rlnAngleRot": eulers[0],
             "rlnAngleTilt": eulers[1],
             "rlnAnglePsi": eulers[2],
-            "rlnImagePixelSize": 1.0,
-            "rlnMicrographName": "micrograph.mrc",
-            "rlnOpticsGroup": 1,
-            "faVectorX": vector_norm[0],
-            "faVectorY": vector_norm[1],
-            "faVectorZ": vector_norm[2],
+            # "rlnImagePixelSize": ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesPixelSize,
+            # "rlnMicrographName": "micrograph.mrc",
+            # "rlnOpticsGroup": 1,
+            # "faVectorX": vector_norm[0],
+            # "faVectorY": vector_norm[1],
+            # "faVectorZ": vector_norm[2],
         })
     
     pd.DataFrame(ampa_positions).to_csv(output_path / "ampa_positions.txt", sep=" ", header=None, index=False, mode="w")
@@ -314,7 +337,6 @@ def prepare_aunp_and_synaptic_membrane_model(
                                         output_path=output_path / "postsynaptic.txt")
     subregion.pl1PostsynapticModel = (output_path / "postsynaptic.txt")
 
-from pydantic import BaseModel
 class AuNP_statistic(BaseModel):
     distance_to_pre: float
     distance_to_post: float
@@ -333,14 +355,7 @@ def calculate_statistics(ctx: FAContext, subregion: Pipeline1ClusterRegion):
 
     pass
 
-class relion_particle(BaseModel):
-    rlnTomoName: str
-    rlnCoordinateX: float
-    rlnCoordinateY: float
-    rlnCoordinateZ: float
-    rlnAngleRot: float
-    rlnAngleTilt: float
-    rlnAnglePsi: float
+
     
 
     
