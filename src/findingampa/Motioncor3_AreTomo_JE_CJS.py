@@ -41,6 +41,7 @@ def main(
     pixel_size: float = typer.Argument(..., help="Pixel size of movies in Angstroms"),
     run_aretomo: bool = typer.Option(False, help="Run AreTomo after MotionCor3"),
     dose_per_tilt: float = typer.Option(4.55, help="Dose per tilt in e/A^2"),
+    gpu: float = typer.Option(0, help="GPU ID for MotionCor"),
 
 ):
     #check that IMOD, MotionCor3, and AreTomo modules are loaded
@@ -138,7 +139,7 @@ def main(
                 command += f" -InEer {movieinfo.FileName} –EerSampling 1 "
             command += f" -OutMrc {mc_outpath / ('tilt'+str(movieinfo.ExposureOrder) +'_' + str(round(movieinfo.TiltAngle)) +'.mrc')} "
             command += f" -FtBin {2.5 / movieinfo.PixelSize}"
-            command += f" -Gpu 0  -SplitSum 1 -UseGpus 0 -Gain {tomogram.GainRef}  -Group 2 "
+            command += f" -Gpu {gpu}  -SplitSum 1 -UseGpus {gpu} -Gain {tomogram.GainRef}  -Group 2 "
             command += f"> {mc_outpath / ('tilt'+str(movieinfo.ExposureOrder) +'_' + str(round(movieinfo.TiltAngle)) +'.log')}" 
             print(command)
             subprocess.run(command, shell=True)
