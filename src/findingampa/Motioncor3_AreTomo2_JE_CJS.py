@@ -194,13 +194,13 @@ def main(
             except:
                 print(tomogram + " does not exist - skipping.")
                 continue
-            AreTomo_output = f"{mrc}_volume.mrc"
+            AreTomo_output = f"{mrc}_volume_AreTomo2.mrc"
             if os.path.exists(AreTomo_output):
                 print(tomogram + " already processed - skipping.")
                 continue
             else:
                 print(f"Processing {mrc} with AreTomo2.")
-                command = f"AreTomo2 -InMrc {mrc}.mrc -OutMrc {mrc}_volume.mrc -VolZ 1200 -OutBin 4 -AngFile *.rawtlt"
+                command = f"AreTomo2 -InMrc {mrc}.mrc -OutMrc {mrc}_volume_AreTomo2.mrc -VolZ 1200 -OutBin 4 -AngFile *.rawtlt"
                 os.system(command)
                 os.chdir(tiltseries_folder)
                 print(tomogram + " is done.")
