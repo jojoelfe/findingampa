@@ -39,14 +39,14 @@ def main(
     frames_folder: Path = typer.Argument(..., help="Path to the folder with frames"),
     tiltseries_folder: Path = typer.Argument(..., help="Path to the folder where tiltseries will be stored"),
     pixel_size: float = typer.Argument(..., help="Pixel size of movies in Angstroms"),
-    run_aretomo: bool = typer.Option(False, help="Run AreTomo after MotionCor2"),
-    dose_per_tilt: float = typer.Option(3.5, help="Dose per tilt in e/A^2"),
+    run_aretomo: bool = typer.Option(False, help="Run AreTomo after MotionCor3"),
+    dose_per_tilt: float = typer.Option(4.55, help="Dose per tilt in e/A^2"),
 
 ):
-    #check that imod, motioncor3, and AreTomo modules are loaded
+    #check that IMOD, MotionCor3, and AreTomo modules are loaded
     code = subprocess.run('which imod',shell=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     if code.returncode != 0 :
-        sys.exit("imod not found, please load module, install it or add it to your path!")
+        sys.exit("IMOD not found, please load module, install it or add it to your path!")
 
     code = subprocess.run('which MotionCor3',shell=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     if code.returncode != 0 :
@@ -57,10 +57,14 @@ def main(
         if code.returncode != 0 :
             sys.exit("AreTomo not found, please load module, install it or add it to your path!")
 
-
+    #initialize list of directories that will be output from motioncor3 and input for AreTomo2
+    AreTomo_directories = []
+    AreTomo_mrcs = []
+    
     # Get the list of tomograms
     tomograms = [folder.name for folder in frames_folder.glob("*")]
     tomograms = [TomogramInfo(TomoName=tomogram) for tomogram in tomograms]
+    
     # The processing of a single tomogram
     for tomogram in tomograms:
         tiltseries_file = tiltseries_folder / tomogram.TomoName / (tomogram.TomoName + '.mrc')
@@ -69,6 +73,14 @@ def main(
         rawtlt_file = tiltseries_folder / tomogram.TomoName / (tomogram.TomoName + '.rawtlt')
         dose_file = tiltseries_folder / tomogram.TomoName / (tomogram.TomoName + '.dose')
         csv_file = tiltseries_folder / tomogram.TomoName / (tomogram.TomoName + '.csv')
+        
+        #add tomogram to list for AreTomo processing
+        if run_aretomo:
+            tiltseries_mrc = tiltseries_folder / tomogram.TomoName / tomogram.TomoName
+            processed_folder = os.path.join(tiltseries_folder,tomogram.TomoName)
+            AreTomo_directories.append(processed_folder)
+            AreTomo_mrcs.append(tiltseries_mrc)
+        
         if tiltseries_file.exists() and tiltseries_evn_file.exists() and tiltseries_odd_file.exists() and rawtlt_file.exists() and dose_file.exists() and csv_file.exists():
             print(f"Skipping {tomogram.TomoName}")
             continue
@@ -167,7 +179,35 @@ def main(
             for movie in sorted(movie_info_list, key=lambda x: x.ExposureOrder):
                 f.write(f"{movie.ExposureOrder},{round(movie.TiltAngle)}\n")
 
-    
+        print("MotionCor3 processing is complete.")
+        
+        
+    if run_aretomo:
+        
+        # Change the working directory to the tiltseries_folder
+        os.chdir(tiltseries_folder)
+
+        # Process all tomograms with AreTomo, if not already processed
+        for (tomogram, mrc) in zip(AreTomo_directories, AreTomo_mrcs):   
+            try:
+                os.chdir(tomogram)
+            except:
+                print(tomogram + " does not exist - skipping.")
+                continue
+            AreTomo_output = f"{mrc}_volume_AreTomo.mrc"
+            if os.path.exists(AreTomo_output):
+                print(tomogram + " already processed - skipping.")
+                continue
+            else:
+                print(f"Processing {mrc} with AreTomo.")
+                command = f"AreTomo -InMrc {mrc}.mrc -OutMrc {mrc}_volume_AreTomo.mrc -VolZ 1200 -OutBin 4 -AngFile *.rawtlt"
+                os.system(command)
+                os.chdir(tiltseries_folder)
+                print(tomogram + " is done.")
+
+        print("AreTomo processing is complete.")
+
+ 
 
 if __name__ == "__main__":
     typer.run(main)
