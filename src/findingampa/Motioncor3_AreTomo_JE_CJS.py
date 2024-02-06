@@ -164,7 +164,7 @@ def main(
         print(command_ODD)
         subprocess.run(command_ODD, shell=True)
 
-        subprocess.run(f"rm {mc_outpath}/*", shell=True)
+        subprocess.run(f"rm {mc_outpath}/*.mrc", shell=True)
 
         TomogramInfo.PixelSize = movie_info_list[0].PixelSize
         with open(rawtlt_file, 'w') as f:
