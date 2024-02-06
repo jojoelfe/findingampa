@@ -201,7 +201,7 @@ def main(
                 continue
             else:
                 print(f"Processing {mrc} with AreTomo2.")
-                command = f"AreTomo2 -InMrc {mrc}.mrc -OutMrc {mrc}_volume_AreTomo2.mrc -VolZ 1200 -OutBin 4 -AngFile *.rawtlt"
+                command = f"AreTomo2 -InMrc {mrc}.mrc -OutMrc {mrc}_volume_AreTomo2.mrc -VolZ 1200 -OutBin 4 -AngFile *.rawtlt -Gpu {gpu}"
                 os.system(command)
                 os.chdir(tiltseries_folder)
                 print(tomogram + " is done.")
