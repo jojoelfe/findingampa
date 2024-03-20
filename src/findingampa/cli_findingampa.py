@@ -7,14 +7,16 @@ from types import SimpleNamespace
 import pandas as pd
 from findingampa.pipeline1.cli_pipeline1 import app as pipeline1_app
 from findingampa.pipeline2.cli_pipeline2 import app as pipeline2_app
+from findingampa.pipeline3.cli_pipeline3 import app as pipeline3_app
 from findingampa.project_management import Project, FAContext, FAGlobal, Tomogram, RelionTomogram
-
+from typing import Optional
 
 app = typer.Typer(
 )
 
 app.registered_commands += pipeline1_app.registered_commands
 app.registered_commands += pipeline2_app.registered_commands
+app.registered_commands += pipeline3_app.registered_commands
 
 def version_callback(value: bool):
     from findingampa import __version__ 
@@ -38,17 +40,17 @@ def main(
             ctx.obj = SimpleNamespace(project = None, imod_path = imod_path, project_path = None), 
             return
     project_object = starfile.read(project,always_dict=True)
-    project_object["Data"] = project_object["Data"].apply(lambda x: x.to_dict(),axis=1).to_list()
+    project_object["data"] = project_object["data"].apply(lambda x: x.to_dict(),axis=1).to_list()
     project_object = Project(**project_object)
-    relion_tomograms = starfile.read(project_object.Settings.FARelionTomoStar)["global"]
+    relion_tomograms = starfile.read(project_object.settings.FARelionTomoStar)["global"]
     relion_tomograms = {x["rlnTomoName"]: RelionTomogram(**x) for i, x in relion_tomograms.iterrows()}
-    ctx.obj = FAGlobal(project = project_object, tomograms = project_object.Data, project_path = project, project_directory = Path.cwd() / "finding_ampa", relion_tomograms = relion_tomograms)
+    ctx.obj = FAGlobal(project = project_object, tomograms = project_object.data, project_path = project, project_directory = Path.cwd() / "finding_ampa", relion_tomograms = relion_tomograms)
 
 @app.command()
 def update_project(
     ctx: FAContext,
 ):
-    ctx.obj.project.Data = pd.DataFrame([x.model_dump() for x in ctx.obj.tomograms])
+    ctx.obj.project.data = pd.DataFrame([x.model_dump() for x in ctx.obj.tomograms])
     starfile.write(ctx.obj.project.model_dump(),Path.cwd() / "finding_ampa_project.star")
 
 @app.command()
@@ -66,10 +68,10 @@ def new_project(
         typer.echo("Project file already exists")
         raise typer.Exit()
     project = Project()
-    project.Settings.FARelionTomoStar = tomogram_star
+    project.settings.FARelionTomoStar = tomogram_star
     tomograms = starfile.read(tomogram_star)
     for i, tomogram in tomograms["global"].iterrows():
-        project.Data.append(Tomogram(FATomogramName=tomogram["rlnTomoName"]))
+        project.data.append(Tomogram(FATomogramName=tomogram["rlnTomoName"]))
     project.write(project_file)
 
 @app.command()
@@ -190,3 +192,201 @@ def test_skeletonize(
         data[z,:,:] = skeleton
     with mrcfile.new(qpix_data.with_stem(qpix_data.stem + '_ske').with_suffix('.mrc'), overwrite=True) as mrc:
         mrc.set_data(data)
+
+@app.command()
+def test_membr(
+    ctx: FAContext,
+):
+    from findingampa.pipeline1.pipeline1_steps import annotate_membrane
+    #suffixes= ["_relion.mrc", "_ci.mrc","_cryocare.mrc","_mBP.mrc","_mSIRT.mrc"]
+    suffixes= ["_mBP_rotx.mrc","_mSIRT_rotx.mrc"]
+    for suf in suffixes:
+        tomogram = ctx.obj.tomograms[0]
+        tomogram.FAPL1TomoSuffixForMembrain = suf
+        annotate_membrane(ctx,tomogram=tomogram, output_path=Path.cwd() / "finding_ampa" / f"pipeline_data_test{suf}" / "pipeline1")
+
+@app.command()
+def reconstruct(
+    ctx: FAContext,
+    tomogram: str = typer.Argument(...,help="Name of tomogram"),
+    method: int = typer.Option(1,help="Reconstruction method"),
+):
+    from findingampa.utils.reconstruct import reconstruct_by_relion, reconstruct_by_libtilt
+    if method == 1:
+        output = reconstruct_by_relion(ctx.obj.project.settings.FARelionTomoStar,tomogram,binning=4.0)
+        print(f"Reconstruction saved to {output}")
+    elif method == 2:
+        output = reconstruct_by_libtilt(ctx.obj.project.settings.FARelionTomoStar,tomogram,binning=4.0)
+        print(f"Reconstruction saved to {output}")
+
+@app.command()
+def compare_projection(
+    ctx: FAContext,
+    tomogram: str = typer.Argument(...,help="Name of tomogram"),
+    tilt: int = typer.Argument(0,help="Tilt angle"),
+    aunp_filename: Path = typer.Argument(...,help="Path to aunp file")
+):
+    from findingampa.utils.projection import compare_mine_and_libtilt
+    compare_mine_and_libtilt(ctx,tomogram,tilt,aunp_filename)
+
+@app.command()
+def test_3d_cc(
+    tomogram: Path = typer.Argument(...,help="Path to tomogram"),
+    r: float = typer.Option(2,help="Radius"),
+):
+    from findingampa.utils.tm3d import test_3d_cc_fft
+    import torch
+    import mrcfile
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    volume = torch.as_tensor(mrcfile.read(tomogram),device=device)
+    cc_image = test_3d_cc_fft(volume,r)
+    with mrcfile.new(tomogram.with_stem(tomogram.stem + '_cc').with_suffix('.mrc'), overwrite=True) as mrc:
+        mrc.set_data(cc_image.cpu().numpy())
+
+@app.command()
+def test_dog(
+    tomogram: Path = typer.Argument(...,help="Path to tomogram"),
+    r1: float = typer.Option(2,help="Radius 1"),):
+    pass
+
+@app.command()
+def refine_shifts_using_aunps(
+    ctx: FAContext,
+    tomogram: str = typer.Argument(...,help="Name of tomogram"),
+    aunp_filename: Path = typer.Argument(...,help="Path to aunp file"),
+    tomogram_starfile: Optional[Path] = typer.Option(None,help="Path to tomogram star file"),
+    plot: bool = typer.Option(False,help="Plot the results")
+):
+    
+    if tomogram_starfile is None:
+        tomogram_starfile = ctx.obj.project.settings.FARelionTomoStar
+    
+    from findingampa.utils.transforms import load_relion_matrices
+    from findingampa.utils.projection import load_aunps, project_aunp_model_libtilt
+    import mrcfile
+    import torch
+    import starfile
+    import matplotlib.pyplot as plt
+    import numpy as np
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    tomogram_infos = starfile.read(tomogram_starfile)
+
+    tomogram_info = tomogram_infos["global"][tomogram_infos["global"]["rlnTomoName"] == tomogram].iloc[0]
+    tilt_info = tomogram_infos[tomogram]
+
+    matrices = load_relion_matrices(tilt_info, device)
+
+    aunps = load_aunps(aunp_filename, device)
+    tilt_series = torch.as_tensor(mrcfile.read(tomogram_info["rlnTomoTiltSeriesName"]),device=device)
+
+    if plot:
+        # Arrange len(matrices) subplots in a
+        fig, axs = plt.subplots(2, len(matrices), figsize=(20, 4)) 
+
+    for i in range(tilt_series.shape[0]):
+        model_image, C = project_aunp_model_libtilt(aunps, matrices[i], tilt_series.shape[1:], 8.3, device)
+        model_image *= -1.0
+        image_product = torch.fft.fft2(tilt_series[i]) * torch.fft.fft2(model_image).conj()
+        cc_image = torch.fft.fftshift(torch.fft.ifft2(image_product))
+        sub_orig = cc_image.real[cc_image.real.shape[0]//2-100:cc_image.real.shape[0]//2+100,cc_image.real.shape[1]//2-100:cc_image.real.shape[1]//2+100]
+        peak_pos = (sub_orig==torch.max(sub_orig)).nonzero()
+        shift = (peak_pos-torch.tensor([100,100],device=device))[0]
+        print(shift)
+        matrices[i][0,3] += shift[1]
+        matrices[i][1,3] += shift[0]
+        model_image, C = project_aunp_model_libtilt(aunps, matrices[i], tilt_series.shape[1:], 8.3, device)
+        model_image = model_image * -1.0
+        image_product = torch.fft.fft2(tilt_series[i]) * torch.fft.fft2(model_image).conj()
+        cc_image = torch.fft.fftshift(torch.fft.ifft2(image_product))
+        sub_new = cc_image.real[cc_image.real.shape[0]//2-100:cc_image.real.shape[0]//2+100,cc_image.real.shape[1]//2-100:cc_image.real.shape[1]//2+100]
+        if plot:
+            axs[0, i].imshow(sub_orig.cpu().detach())
+            axs[1, i].imshow(sub_new.cpu().detach())
+            # disable axes
+            axs[0, i].axis('off')
+            axs[1, i].axis('off')
+    fig.tight_layout()
+    plt.show()
+    for tilt in range(len(matrices)):
+        for i in range(4):
+            arr_str = np.array2string(matrices[tilt][i].cpu().numpy(), precision=12, separator=',', suppress_small=True,max_line_width=1000)
+            arr_str = arr_str.replace(' ', '')
+            tomogram_infos[tomogram].iloc[tilt,i] = arr_str
+    starfile.write(tomogram_infos,str(Path(tomogram_starfile).with_suffix('')) + '_centered.star')
+
+
+@app.command()
+def refine_tilts_using_aunps(
+    ctx: FAContext,
+    tomogram: str = typer.Argument(...,help="Name of tomogram"),
+    aunp_filename: Path = typer.Argument(...,help="Path to aunp file"),
+    tomogram_starfile: Optional[Path] = typer.Option(None,help="Path to tomogram star file"),
+    plot: bool = typer.Option(False,help="Plot the results")
+):
+    
+    if tomogram_starfile is None:
+        tomogram_starfile = ctx.obj.project.settings.FARelionTomoStar
+    
+    from findingampa.utils.transforms import load_relion_matrices
+    from findingampa.utils.projection import load_aunps, project_aunp_model_libtilt
+    import mrcfile
+    import torch
+    import starfile
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from libtilt.transformations import Rx, Ry, Rz, T
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    tomogram_infos = starfile.read(tomogram_starfile)
+
+    tomogram_info = tomogram_infos["global"][tomogram_infos["global"]["rlnTomoName"] == tomogram].iloc[0]
+    tilt_info = tomogram_infos[tomogram]
+
+    matrices = load_relion_matrices(tilt_info, device)
+
+    aunps = load_aunps(aunp_filename, device)
+    tilt_series = torch.as_tensor(mrcfile.read(tomogram_info["rlnTomoTiltSeriesName"]),device=device)
+
+
+    if plot:
+        # Arrange len(matrices) subplots in a
+        fig, axs = plt.subplots(2, len(matrices), figsize=(20, 4)) 
+    for tilt in range(len(matrices)):
+        scores = np.zeros((21,21))
+
+        for a1 in range(21):
+            for a2 in range(21):
+                a1a = (a1-10) * 0.25
+                a2a = (a2-10) * 0.25
+                new_matrix = Rx(a1a).to(device).double()[0] @ Ry(a2a).to(device).double()[0] @ matrices[tilt]
+                model_image, c = project_aunp_model_libtilt(aunps, new_matrix, tilt_series.shape[1:], 8.3, device)
+                model_image = model_image  * -1.0
+                image_product = torch.fft.fft2(tilt_series[tilt]) * torch.fft.fft2(model_image).conj()
+                cc_image = torch.fft.fftshift(torch.fft.ifft2(image_product))
+                sub_new = cc_image.real[cc_image.real.shape[0]//2-100:cc_image.real.shape[0]//2+100,cc_image.real.shape[1]//2-100:cc_image.real.shape[1]//2+100]
+                #axs[a1,a2].imshow(sub_new.cpu().detach())
+                sub_new -= sub_new.mean()
+                sub_new /= sub_new.std()
+                score = sub_new.max().item()
+                scores[a1,a2] = score
+        if plot:
+            axs[0,tilt].imshow(scores)
+            # Get location of maxima of scores
+            m_ind = np.unravel_index(scores.argmax(), scores.shape)
+            print(m_ind)
+            a1a = (m_ind[0]-10) * 0.25
+            a2a = (m_ind[1]-10) * 0.25
+            best_matrix = Rx(a1a).to(device).double()[0] @ Ry(a2a).to(device).double()[0] @ matrices[tilt]
+            matrices[tilt] = best_matrix
+            model_image, c = project_aunp_model_libtilt(aunps, best_matrix, tilt_series.shape[1:], 8.3, device)
+            model_image = model_image  * -1.0
+            image_product = torch.fft.fft2(tilt_series[tilt]) * torch.fft.fft2(model_image).conj()
+            cc_image = torch.fft.fftshift(torch.fft.ifft2(image_product))
+            sub_new = cc_image.real[cc_image.real.shape[0]//2-100:cc_image.real.shape[0]//2+100,cc_image.real.shape[1]//2-100:cc_image.real.shape[1]//2+100]
+            axs[1,tilt].imshow(sub_new.cpu())
+    plt.show()
+    for tilt in range(len(matrices)):
+        for i in range(4):
+            arr_str = np.array2string(matrices[tilt][i].cpu().numpy(), precision=12, separator=',', suppress_small=True,max_line_width=1000)
+            arr_str = arr_str.replace(' ', '')
+            tomogram_infos[tomogram].iloc[tilt,i] = arr_str
+    starfile.write(tomogram_infos,tomogram_starfile.parent / 'tilted.star')

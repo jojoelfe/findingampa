@@ -107,6 +107,7 @@ def run_pipeline1(
         data.write(data_file)
 
 
+
     # Annotate subregions
     print(Text("Annotating subregions with AuNP beads", style="bold blue"))
 
@@ -187,7 +188,7 @@ def visualize_3dmod(
         ctx: FAContext,
 ):
     import subprocess
-    data = Pipeline1Data.read(ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline1" / "pipeline1_data.star")
+    data = Pipeline1Data.read(ctx.obj.project.settings.FADataDir / "pipeline_data" / "pipeline1" / "pipeline1_data.star")
     for tomogram in ctx.obj.tomograms:
         continue
 

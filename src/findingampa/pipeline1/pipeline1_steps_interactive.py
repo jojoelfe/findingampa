@@ -19,16 +19,16 @@ def update_modelfile(ctx: FAContext, data: Pipeline1Data, tomogram: Tomogram):
         if subregion.pl1TomogramName == tomogram.FATomogramName:
             object_id += 1
             
-            for y in range(subregion.pl1Ymin,subregion.pl1Ymax+1):
-                model_items.append([object_id, y, subregion.pl1Xmin, y, subregion.pl1Zmin])
-                model_items.append([object_id, y, subregion.pl1Xmax, y, subregion.pl1Zmin])
-                model_items.append([object_id, y, subregion.pl1Xmax, y, subregion.pl1Zmax])
-                model_items.append([object_id, y, subregion.pl1Xmin, y, subregion.pl1Zmax])
+            for z in range(subregion.pl1Zmin,subregion.pl1Zmax+1):
+                model_items.append([object_id, z, subregion.pl1Xmin, subregion.pl1Ymin, z])
+                model_items.append([object_id, z, subregion.pl1Xmax, subregion.pl1Ymin, z])
+                model_items.append([object_id, z, subregion.pl1Xmax, subregion.pl1Ymax, z])
+                model_items.append([object_id, z, subregion.pl1Xmin, subregion.pl1Ymax, z])
                 
     
     df = pd.DataFrame(model_items, columns=["obj","con","x","y","z"])
     df.to_csv(txt_path, sep=" ", header=None, index=False, mode="a")
-    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model {txt_path} {model_path}", shell=True)
+    subprocess.run(f"{ctx.obj.project.settings.FAImodPath}/point2model {txt_path} {model_path}", shell=True)
     return model_path
 
 def annotate_subregion(ctx: FAContext, tomogram: Tomogram, data, data_file, maxclusterid):
@@ -38,13 +38,13 @@ def annotate_subregion(ctx: FAContext, tomogram: Tomogram, data, data_file, maxc
     import typer
     import os
 
-    tomogram_path = ctx.obj.project_directory.parent / (ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesName[:-4] + tomogram.FAPL1TomoSuffixForFindbeads)
+    tomogram_path = ctx.obj.project_directory.parent / "tomograms" / tomogram.FATomogramName / (tomogram.FATomogramName + tomogram.FAPL1TomoSuffixForMembrain)
     with mrcfile.open(tomogram_path) as mrc:
                 ydim = mrc.header.ny
 
     # Launch 3dmod in a way that allows read/write to stdin/stdout
 
-    p_3dmod  = Popen(f"{ctx.obj.project.Settings.FAImodPath}/3dmod -Y -L {tomogram_path}", 
+    p_3dmod  = Popen(f"{ctx.obj.project.settings.FAImodPath}/3dmod -L {tomogram_path}", 
                     shell=True, 
                     #cwd=findbeads_path,
                     stdin=PIPE, 
@@ -81,11 +81,11 @@ def annotate_subregion(ctx: FAContext, tomogram: Tomogram, data, data_file, maxc
                     typer.echo("Please also assign High and Low Z values")
                     break
                 # Read values, taking roation around x into account
-                _ , xmin, zmin, xmax, zmax, ymin, ymax = values
+                _ , xmin, ymin, xmax, ymax, zmin, zmax = values
                 #typer.echo(ctx, output_path, tomogram, xmin, ymin, xmax, ymax, zmin, zmax)
-                ymin = ydim - int(ymin)
-                ymax = ydim - int(ymax)
-                ymin, ymax = ymax, ymin
+                #ymin = ydim - int(ymin)
+                #ymax = ydim - int(ymax)
+                #ymin, ymax = ymax, ymin
                 print(f"Adding subregion Xmin {xmin} Xmax {xmax} Ymin {ymin} Ymax {ymax} Zmin {zmin} Zmax {zmax}")
                 data.pl1ClusterRegions[maxclusterid+1] = Pipeline1ClusterRegion(
                     pl1CluserId=maxclusterid+1,
@@ -116,6 +116,7 @@ def annotate_threshold_and_synaptic_membranes(
     from subprocess import Popen, PIPE
     from rich.prompt import Prompt
     import pandas as pd
+    output_path = Path("finding_ampa") / "pipeline_data" / "pipeline1"
 
     output_path = output_path / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
     output_path.mkdir(parents=True, exist_ok=True)
@@ -126,8 +127,8 @@ def annotate_threshold_and_synaptic_membranes(
                                                         subregion=subregion,
                                                         output_path=output_path)
 
-    tomogram_path = ctx.obj.project_directory.parent / (ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesName[:-4] + tomogram.FAPL1TomoSuffixForFindbeads)
-    p_3dmod = Popen(f"{ctx.obj.project.Settings.FAImodPath}/3dmod -L {tomogram_path} {output_path / 'temp_model.mod'}",
+    tomogram_path = ctx.obj.project_directory.parent / "tomograms" / tomogram.FATomogramName / (tomogram.FATomogramName + tomogram.FAPL1TomoSuffixForMembrain)
+    p_3dmod = Popen(f"{ctx.obj.project.settings.FAImodPath}/3dmod -L {tomogram_path} {output_path / 'temp_model.mod'}",
             shell=True, 
             #cwd=findbeads_path,
             stdin=PIPE, 

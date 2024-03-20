@@ -50,11 +50,11 @@ def run_csv(
 
     from concurrent.futures import ThreadPoolExecutor
     df = pd.read_csv(csv_file)
+    df = df[df["Tomogram name"].notna()]
     print(df)
     
     existing_tilt_series = df[df["Tomogram name"].apply(lambda x: (Path("/scratch/pompeii/elferich/gouaux_tomo/ProcessedData/tomograms/") / str(x) / f"{x}.mrc").exists())]
-    print(existing_tilt_series)
-    
+    print(existing_tilt_series["Tomogram name"])
     # Setup the ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Start the load operations and mark each future with the URL
@@ -76,7 +76,11 @@ def analyze_csv(
     from concurrent.futures import ThreadPoolExecutor
     df = pd.read_csv(csv_file)
     
-    existing_tilt_series = df
+    df = df[df["Tomogram name"].notna()]
+    print(df)
+    
+    existing_tilt_series = df[df["Tomogram name"].apply(lambda x: (Path("/scratch/pompeii/elferich/gouaux_tomo/ProcessedData/tomograms/") / str(x) / f"{x}.mrc").exists())]
+  
     
     # Setup the ThreadPoolExecutor
     for index, row in existing_tilt_series.iterrows():
@@ -110,7 +114,6 @@ def run_single_tomogram(
          output_diagnostic_filename=str(output_path / 'diagnostic_output.mrc'),
          spherical_aberration=sa
     )
-            
     if not Path(pars.output_diagnostic_filename).exists() and run_ctffind5:      
         proc = Popen(cistem_path / "ctffind",  stdin=PIPE)
         proc.communicate(input=str.encode('\n'.join(map(str,list(pars.model_dump().values())))))

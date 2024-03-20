@@ -23,7 +23,7 @@ def run_pipeline2(
     from findingampa.pipeline2.pipeline2_steps import read_tilt_info_from_mdoc, run_motioncor2, run_ctffind, run_apply_ctf
 
 
-    output_path = ctx.obj.project.Settings.FADataDir / "pipeline_data" / "pipeline2"
+    output_path = ctx.obj.project.settings.FADataDir / "pipeline_data" / "pipeline2"
     output_path.mkdir(parents=True, exist_ok=True)
     data_file = output_path / "pipeline2_data.star"
     if data_file.exists():
@@ -59,8 +59,8 @@ def run_pipeline2(
             continue
         print (f"Running motioncor2 on {tomogram.FATomogramName}")
         success = run_motioncor2(tomogram, tilt_info=data.pl2TomogramResults[tomogram.FATomogramName].pl2TiltInfo,
-                                mc2_path=ctx.obj.project.Settings.FAMC2Path, 
-                                imod_path=ctx.obj.project.Settings.FAImodPath,
+                                mc2_path=ctx.obj.project.settings.FAMC2Path, 
+                                imod_path=ctx.obj.project.settings.FAImodPath,
                                 pipline_data_path=output_path)
         data.pl2TomogramResults[tomogram.FATomogramName].pl2MotionCorrDone = success
         data.write(data_file)
@@ -72,7 +72,7 @@ def run_pipeline2(
             continue
         print (f"Running ctffind on {tomogram.FATomogramName}")
         success = run_ctffind(tomogram, tilt_info=data.pl2TomogramResults[tomogram.FATomogramName].pl2TiltInfo,
-                                cistem_path=ctx.obj.project.Settings.FACistemPath,
+                                cistem_path=ctx.obj.project.settings.FACistemPath,
                                 pipline_data_path=output_path)
         data.pl2TomogramResults[tomogram.FATomogramName].pl2CtffindDone = True
         data.write(data_file)
@@ -80,5 +80,5 @@ def run_pipeline2(
     # Step3: Run apply_ctf
     for tomogram in ctx.obj.tomograms:
         run_apply_ctf(tomogram, tilt_info=data.pl2TomogramResults[tomogram.FATomogramName].pl2TiltInfo,
-                                cistem_path=ctx.obj.project.Settings.FACistemPath,
+                                cistem_path=ctx.obj.project.settings.FACistemPath,
                                 pipline_data_path=output_path)

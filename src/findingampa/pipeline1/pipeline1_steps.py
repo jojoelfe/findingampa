@@ -11,9 +11,11 @@ def annotate_membrane(ctx: FAContext, tomogram:Tomogram, output_path):
     membrain_output_path.mkdir(parents=True, exist_ok=True)
     MEMBRAIN_MODEL_PATH =  ctx.obj.project_directory / "static" / "MemBrain_seg_v10_alpha.ckpt"
     segmentation_file = segment(
-        tomogram_path=ctx.obj.project_directory.parent / (ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesName[:-4] + tomogram.FAPL1TomoSuffixForMembrain),
+        tomogram_path=ctx.obj.project_directory.parent / "tomograms" / tomogram.FATomogramName / (tomogram.FATomogramName + tomogram.FAPL1TomoSuffixForMembrain),
         ckpt_path=MEMBRAIN_MODEL_PATH,
         out_folder=membrain_output_path,
+        segmentation_threshold=0.0,
+        store_probabilities=True
     )
     return Path(segmentation_file)
 
@@ -23,21 +25,16 @@ def convert_qpix_into_imod(ctx, tomogram: Tomogram, output_path, segmentation_fi
     membrain_output_path = output_path / "membrain" / tomogram.FATomogramName
     membrain_output_path.mkdir(parents=True, exist_ok=True)
     # Replace "."
-    segment_rotx = str(Path(segmentation_file).with_suffix("")) + "_rotx.mrc"
-    print(segment_rotx)
     membrain_automod_file = membrain_output_path / "membrain_automod.mod"
 
-    run(f"{ctx.obj.project.Settings.FAImodPath}/clip rotx {segmentation_file} {segment_rotx}", shell=True)
-    run(f"{ctx.obj.project.Settings.FAImodPath}/imodauto -n -E 1.0 -u {segment_rotx} {membrain_automod_file}", shell=True)
-    run(f"{ctx.obj.project.Settings.FAImodPath}/reducecont -sp 1.0 {membrain_automod_file} {membrain_automod_file}", shell=True)
-    run(f"{ctx.obj.project.Settings.FAImodPath}/imodmesh {membrain_automod_file}", shell=True)
-    membrain_surfaces_file_rotx = membrain_output_path / "membrain_surfaces_rotx.mod"
+    run(f"{ctx.obj.project.settings.FAImodPath}/imodauto -n -E 1.0 -u {segmentation_file} {membrain_automod_file}", shell=True)
+    run(f"{ctx.obj.project.settings.FAImodPath}/reducecont -sp 1.0 {membrain_automod_file} {membrain_automod_file}", shell=True)
+    run(f"{ctx.obj.project.settings.FAImodPath}/imodmesh {membrain_automod_file}", shell=True)
     membrain_surfaces_file = membrain_output_path / "membrain_surfaces.mod"
     membrain_surfaces_file_point = membrain_output_path / "membrain_surfaces.txt"
-    run(f"{ctx.obj.project.Settings.FAImodPath}/imodsortsurf -s {membrain_automod_file} {membrain_surfaces_file_rotx}", shell=True)
-    run(f"{ctx.obj.project.Settings.FAImodPath}/imodtrans -R 0 {membrain_surfaces_file_rotx} {membrain_surfaces_file}", shell=True)
-    run(f"{ctx.obj.project.Settings.FAImodPath}/model2point -ob {membrain_surfaces_file} {membrain_surfaces_file_point}", shell=True)
-    run(f"{ctx.obj.project.Settings.FAImodPath}/point2model {membrain_surfaces_file_point} {membrain_surfaces_file}", shell=True)
+    run(f"{ctx.obj.project.settings.FAImodPath}/imodsortsurf -s {membrain_automod_file} {membrain_surfaces_file}", shell=True)
+    run(f"{ctx.obj.project.settings.FAImodPath}/model2point -ob {membrain_surfaces_file} {membrain_surfaces_file_point}", shell=True)
+    run(f"{ctx.obj.project.settings.FAImodPath}/point2model {membrain_surfaces_file_point} {membrain_surfaces_file}", shell=True)
 
     return membrain_surfaces_file_point
 
@@ -86,8 +83,8 @@ def create_model_file_for_subregion(ctx: FAContext,
     print()
     # Convert to model file
     import subprocess
-    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/point2model {output_path / 'temp_model.txt'} {output_path / 'temp_model.mod'}", shell=True)
-    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/imodjoin -c {subregion.pl1AuNPModelfile}  {output_path/ 'temp_model.mod'} {output_path/ 'temp_model.mod'}", shell=True)
+    subprocess.run(f"{ctx.obj.project.settings.FAImodPath}/point2model {output_path / 'temp_model.txt'} {output_path / 'temp_model.mod'}", shell=True)
+    subprocess.run(f"{ctx.obj.project.settings.FAImodPath}/imodjoin -c {subregion.pl1AuNPModelfile}  {output_path/ 'temp_model.mod'} {output_path/ 'temp_model.mod'}", shell=True)
     
     return unique_objects 
 
@@ -99,9 +96,9 @@ def run_findbeads3d(ctx: FAContext, subregion: Pipeline1ClusterRegion, output_pa
     beads_model_file_dir.mkdir(parents=True, exist_ok=True)
     beads_model_file = beads_model_file_dir / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}.mod"
     beads_point_file = beads_model_file_dir / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}.txt"
-    tomogram_path = ctx.obj.project_directory.parent / (ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesName[:-4] + tomogram.FAPL1TomoSuffixForFindbeads)
-    run(f"{ctx.obj.project.Settings.FAImodPath}/findbeads3d -inp {tomogram_path}  -si 1.5 -a -50,50 -yl -thresh 20 -sto 0.5 -o {beads_model_file} -x {subregion.pl1Xmin},{subregion.pl1Xmax} -z {subregion.pl1Zmin},{subregion.pl1Zmax} -yminmax {subregion.pl1Ymin},{subregion.pl1Ymax}", shell=True)
-    run(f"{ctx.obj.project.Settings.FAImodPath}/model2point -ob -v -1 {beads_model_file} {beads_point_file}", shell=True)
+    tomogram_path = ctx.obj.project_directory.parent / "tomograms" / tomogram.FATomogramName / (tomogram.FATomogramName + tomogram.FAPL1TomoSuffixForMembrain)
+    run(f"{ctx.obj.project.settings.FAImodPath}/findbeads3d -inp {tomogram_path}  -si 1.5 -a -50,50  -thresh 50 -sto 0.5 -o {beads_model_file} -x {subregion.pl1Xmin},{subregion.pl1Xmax} -z {subregion.pl1Zmin},{subregion.pl1Zmax} -yminmax {subregion.pl1Ymin},{subregion.pl1Ymax}", shell=True)
+    run(f"{ctx.obj.project.settings.FAImodPath}/model2point -ob -v -1 {beads_model_file} {beads_point_file}", shell=True)
     subregion.pl1AuNPModelfile= beads_model_file
 
 def write_aunp_model_file(
@@ -112,7 +109,7 @@ def write_aunp_model_file(
 ):
     import subprocess
     import pandas as pd
-    subprocess.run(f"{ctx.obj.project.Settings.FAImodPath}/model2point -ob -v -1 {AuNPModelfile} {output_path}" , shell=True)
+    subprocess.run(f"{ctx.obj.project.settings.FAImodPath}/model2point -ob -v -1 {AuNPModelfile} {output_path}" , shell=True)
     aunp_data = pd.read_csv(output_path, delim_whitespace=True, header=None, names=["ob","c","x","y","z","v"])
     original_length = len(aunp_data)
     aunp_data = aunp_data[aunp_data["v"] >= threshold]
@@ -152,7 +149,7 @@ def estimate_ampa_poses(
     output_path = Path("finding_ampa") / "pipeline_data" / "pipeline1" / "subregions" / f"{tomogram.FATomogramName}_{subregion.pl1CluserId}"
     output_path.mkdir(parents=True, exist_ok=True)
     import mrcfile
-    tomogram_path = ctx.obj.project_directory.parent / (ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesName[:-4] + tomogram.FAPL1TomoSuffixForFindbeads)
+    tomogram_path = ctx.obj.project_directory.parent / "tomograms" / tomogram.FATomogramName / (tomogram.FATomogramName + tomogram.FAPL1TomoSuffixForMembrain)
     with mrcfile.open(tomogram_path) as mrc:
                 ydim = mrc.header.ny
                 xdim = mrc.header.nx
@@ -265,7 +262,7 @@ def create_visualization_files(
         aunps.append(aunp_data)
     combined_aunp = pd.concat(aunps)
     combined_aunp.to_csv(output_path / "combined_aunp.txt", sep=" ", header=None, index=False, mode="w")
-    run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  -sc -color 255,215,0 -sp 2 {output_path / 'combined_aunp.txt'} {output_path / 'combined_aunp.mod'}", shell=True)
+    run(f"{ctx.obj.project.settings.FAImodPath}/point2model  -sc -color 255,215,0 -sp 2 {output_path / 'combined_aunp.txt'} {output_path / 'combined_aunp.mod'}", shell=True)
 
     # Color contour objects
     contour_data  = pd.read_csv(data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationContourFile, delim_whitespace=True, header=None, names=["o","c","x","y","z"])
@@ -284,7 +281,7 @@ def create_visualization_files(
             color_string += " -color 0,0,255 "
         else:   
             color_string += " -color 255,255,255 "
-    run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  {color_string} {data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationContourFile} {output_path / 'colored_contour.mod'}", shell=True)
+    run(f"{ctx.obj.project.settings.FAImodPath}/point2model  {color_string} {data.pl1TomogramResults[tomogram.FATomogramName].pl1SegmentationContourFile} {output_path / 'colored_contour.mod'}", shell=True)
 
     # Combined ampa poses
     ampa_poses = []
@@ -296,11 +293,11 @@ def create_visualization_files(
         ampa_poses.append(ampa_pose_data)
     combined_ampa_poses = pd.concat(ampa_poses)
     combined_ampa_poses.to_csv(output_path / "combined_ampa_poses.txt", sep=" ", header=None, index=False, mode="w")
-    run(f"{ctx.obj.project.Settings.FAImodPath}/point2model  -color 128,0,128 {output_path / 'combined_ampa_poses.txt'} {output_path / 'combined_ampa_poses.mod'}", shell=True)
+    run(f"{ctx.obj.project.settings.FAImodPath}/point2model  -color 128,0,128 {output_path / 'combined_ampa_poses.txt'} {output_path / 'combined_ampa_poses.mod'}", shell=True)
 
     # Combine all three models
     tomogram_path= ctx.obj.project_directory.parent / (ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesName[:-4] + tomogram.FAPL1TomoSuffixForFindbeads)
-    run(f"{ctx.obj.project.Settings.FAImodPath}/imodjoin -i {tomogram_path} {output_path / 'combined_aunp.mod'} {output_path / 'colored_contour.mod'} {output_path / 'combined_ampa_poses.mod'} {output_path / 'combined_all.mod'}", shell=True)
+    run(f"{ctx.obj.project.settings.FAImodPath}/imodjoin -i {tomogram_path} {output_path / 'combined_aunp.mod'} {output_path / 'colored_contour.mod'} {output_path / 'combined_ampa_poses.mod'} {output_path / 'combined_all.mod'}", shell=True)
     open_command = f"3dmod {tomogram_path} {output_path / 'combined_all.mod'}"
 
     # Turn AuNPs into objs file

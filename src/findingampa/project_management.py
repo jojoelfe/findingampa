@@ -36,17 +36,17 @@ class RelionTomogram(BaseModel):
     rlnTomoImportFractionalDose: float
 
 class Project(BaseModel):
-    Settings: Settings = Settings()
-    Data: list[Tomogram] = []
+    settings: Settings = Settings()
+    data: list[Tomogram] = []
 
     def write(self, filename: Path):
         import starfile
         import pandas as pd
         out_dict = {
-            "Settings": self.Settings.model_dump(),
+            "settings": self.settings.model_dump(),
         }
-        if len(self.Data) > 0:
-            out_dict["Data"] = pd.DataFrame([row.model_dump() for row in self.Data])
+        if len(self.data) > 0:
+            out_dict["data"] = pd.DataFrame([row.model_dump() for row in self.data])
         
         starfile.write(out_dict, filename)
 
@@ -58,7 +58,7 @@ class FAGlobal(BaseModel):
     relion_tomograms: dict[str, RelionTomogram]
 
 class FAContext(typer.Context):
-    obj: Optional[FAGlobal] = None
+    obj: FAGlobal 
 
 class relionMicrograph(BaseModel):
     rlnFileName: Path
