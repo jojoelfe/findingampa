@@ -129,6 +129,17 @@ def create_tomograms():
     )
 
 @app.command()
+def napari_animation():
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    tomo = f"{tomo_name}_full_rec_BP_flat.mrc"
+
+    import napari
+
+@app.command()
 def test_centerline(
     contour_file: Path = typer.Argument(...,help="Path to contour file")
 ):
