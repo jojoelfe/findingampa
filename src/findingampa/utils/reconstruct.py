@@ -53,3 +53,38 @@ def reconstruct_by_libtilt(
     matrices = [[s.strip('[]').split(',') for s in matrix] for matrix in matrices]
     matrices = np.array([np.vstack([[float(x) for x in row] for row in matrix]) for matrix in matrices])
     matrices = torch.tensor(matrices,device=device)
+
+def run_tilt(
+        aligned_tilt_series: Path,
+        output: Path,
+        tilt_file: Path,
+        angle_offset: float = 0.0,
+        exclude_list: str = "",
+        SIRT_iterations: int = 0,
+):
+    input_string = f"""
+InputProjections {aligned_tilt_series}
+OutputFile {output}
+IMAGEBINNED 4
+TILTFILE {tilt_file}
+THICKNESS 1000
+RADIAL 0.35 0.035
+FalloffIsTrueSigma 1
+XAXISTILT 0.0
+SCALE 0.0 0.066
+RotateBy90 
+MODE 2
+FULLIMAGE 3370 4746
+SUBSETSTART 0 0
+AdjustOrigin 
+ActionIfGPUFails 1,2
+OFFSET {angle_offset}
+SHIFT 0.0 0.0
+UseGPU 0
+{f"FakeSIRTiterations {SIRT_iterations}" if SIRT_iterations > 0 else ""}
+{f"EXCLUDELIST {exclude_list}" if len(exclude_list) > 0 else ""}
+"""
+    from subprocess import Popen, PIPE
+    process = Popen("tilt -StandardInput",stdin=PIPE,stdout=PIPE,shell=True)
+    output = process.communicate(input=input_string.encode())
+    print(output)

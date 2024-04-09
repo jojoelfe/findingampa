@@ -75,6 +75,16 @@ def new_project(
     project.write(project_file)
 
 @app.command()
+def create_tomograms():
+    from findingampa.utils.reconstruct import run_tilt
+    run_tilt(
+        "20231017_EGmilled24-2_60_ali.mrc",
+        "test.mrc",
+        "20231017_EGmilled24-2_60.tlt",
+        exclude_list="1-2"
+    )
+
+@app.command()
 def test_centerline(
     contour_file: Path = typer.Argument(...,help="Path to contour file")
 ):
