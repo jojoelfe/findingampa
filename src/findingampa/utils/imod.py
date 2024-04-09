@@ -1,5 +1,5 @@
 def get_exclude_list():
-
+    exclude_list = ''
     # Open up align.com file and find the line starting with ExcludeList
     with open('align.com', 'r') as f:
         for line in f:
