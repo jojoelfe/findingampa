@@ -61,13 +61,14 @@ def run_tilt(
         angle_offset: float = 0.0,
         exclude_list: str = "",
         SIRT_iterations: int = 0,
+        thickness: int = 1000,
 ):
     input_string = f"""
 InputProjections {aligned_tilt_series}
 OutputFile {output}
 IMAGEBINNED 4
 TILTFILE {tilt_file}
-THICKNESS 1000
+THICKNESS {thickness}
 RADIAL 0.35 0.035
 FalloffIsTrueSigma 1
 XAXISTILT 0.0
@@ -87,4 +88,3 @@ UseGPU 0
     from subprocess import Popen, PIPE
     process = Popen("tilt -StandardInput",stdin=PIPE,stdout=PIPE,shell=True)
     output = process.communicate(input=input_string.encode())
-    print(output)

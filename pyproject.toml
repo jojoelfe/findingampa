@@ -38,7 +38,8 @@ dependencies = [
  "matplotlib",
  "colorcet",
  "mdocfile",
- "pycistem"
+ "pycistem",
+ "napari[all]"
 ]
 
 [project.optional-dependencies]

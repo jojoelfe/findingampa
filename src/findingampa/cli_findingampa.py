@@ -10,6 +10,7 @@ from findingampa.pipeline2.cli_pipeline2 import app as pipeline2_app
 from findingampa.pipeline3.cli_pipeline3 import app as pipeline3_app
 from findingampa.project_management import Project, FAContext, FAGlobal, Tomogram, RelionTomogram
 from typing import Optional
+from rich import print
 
 app = typer.Typer(
 )
@@ -77,11 +78,54 @@ def new_project(
 @app.command()
 def create_tomograms():
     from findingampa.utils.reconstruct import run_tilt
+    from findingampa.utils.imod import get_exclude_list, get_align_angle_offset, get_tomopitch_angle_offset
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    print(f" Creating tomograms for {tomo_name}")
+    exclude_list = get_exclude_list()
+    print(f"Excluding tilts {exclude_list}")
+    if get_align_angle_offset() > 0.0:
+        print("Align angle offset is not 0.0, please reset to 0.0 and recreate aligned stack and doseweight")
+        raise typer.Exit()
+    angle_offset = get_tomopitch_angle_offset()
+    print(f"Creating WBP untilted tomogram {tomo_name}_full_rec_BP.mrc")
     run_tilt(
-        "20231017_EGmilled24-2_60_ali.mrc",
-        "test.mrc",
-        "20231017_EGmilled24-2_60.tlt",
-        exclude_list="1-2"
+        f"{tomo_name}_ali.mrc",
+        f"{tomo_name}_full_rec_BP.mrc",
+        f"{tomo_name}.tlt",
+        exclude_list=exclude_list,
+        thickness=3000
+    )
+    print(f"Creating WBP tilted tomogram {tomo_name}_full_rec_BP_flat.mrc")
+    run_tilt(
+        f"{tomo_name}_ali.mrc",
+        f"{tomo_name}_full_rec_BP_flat.mrc",
+        f"{tomo_name}.tlt",
+        exclude_list=exclude_list,
+        angle_offset=angle_offset,
+        thickness=1500
+    )
+    print(f"Creating SIRT untilted tomogram {tomo_name}_full_rec_SIRT.mrc")
+    run_tilt(
+        f"{tomo_name}_ali.mrc",
+        f"{tomo_name}_full_rec_SIRT.mrc",
+        f"{tomo_name}.tlt",
+        SIRT_iterations=11,
+        exclude_list=exclude_list,
+        thickness=3000
+    )
+    print(f"Creating SIRT tilted tomogram {tomo_name}_full_rec_SIRT_flat.mrc")
+    run_tilt(
+        f"{tomo_name}_ali.mrc",
+        f"{tomo_name}_full_rec_SIRT_flat.mrc",
+        f"{tomo_name}.tlt",
+        SIRT_iterations=11,
+        exclude_list=exclude_list,
+        angle_offset=angle_offset,
+        thickness=1500
     )
 
 @app.command()
