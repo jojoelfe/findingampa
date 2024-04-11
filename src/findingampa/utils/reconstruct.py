@@ -62,6 +62,7 @@ def run_tilt(
         exclude_list: str = "",
         SIRT_iterations: int = 0,
         thickness: int = 1000,
+        full_image: str = "3370 4746",
 ):
     input_string = f"""
 InputProjections {aligned_tilt_series}
@@ -75,7 +76,7 @@ XAXISTILT 0.0
 SCALE 0.0 0.066
 RotateBy90 
 MODE 2
-FULLIMAGE 3370 4746
+FULLIMAGE {full_image}
 SUBSETSTART 0 0
 AdjustOrigin 
 ActionIfGPUFails 1,2

@@ -24,3 +24,12 @@ def get_tomopitch_angle_offset():
             if line.startswith(' Angle offset - Original:'):
                 tomopitch_angle = line.split()[-1:][0]
     return float(tomopitch_angle)
+
+def get_full_image():
+    # Open up tilt.com file and find the line starting with FullImage
+    with open('tilt.com', 'r') as f:
+        for line in f:
+            if line.startswith('FULLIMAGE'):
+                full_image = ' '.join(line.split()[-2:])
+    
+    return full_image

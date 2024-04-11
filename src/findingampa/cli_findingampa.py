@@ -78,7 +78,7 @@ def new_project(
 @app.command()
 def create_tomograms():
     from findingampa.utils.reconstruct import run_tilt
-    from findingampa.utils.imod import get_exclude_list, get_align_angle_offset, get_tomopitch_angle_offset
+    from findingampa.utils.imod import get_exclude_list, get_align_angle_offset, get_tomopitch_angle_offset, get_full_image
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
     except IndexError:
@@ -91,13 +91,15 @@ def create_tomograms():
         print("Align angle offset is not 0.0, please reset to 0.0 and recreate aligned stack and doseweight")
         raise typer.Exit()
     angle_offset = get_tomopitch_angle_offset()
+    full_image = get_full_image()
     print(f"Creating WBP untilted tomogram {tomo_name}_full_rec_BP.mrc")
     run_tilt(
         f"{tomo_name}_ali.mrc",
         f"{tomo_name}_full_rec_BP.mrc",
         f"{tomo_name}.tlt",
         exclude_list=exclude_list,
-        thickness=3000
+        thickness=3000,
+        full_image=full_image
     )
     print(f"Creating WBP tilted tomogram {tomo_name}_full_rec_BP_flat.mrc")
     run_tilt(
@@ -106,7 +108,8 @@ def create_tomograms():
         f"{tomo_name}.tlt",
         exclude_list=exclude_list,
         angle_offset=angle_offset,
-        thickness=1500
+        thickness=1500,
+        full_image=full_image
     )
     print(f"Creating SIRT untilted tomogram {tomo_name}_full_rec_SIRT.mrc")
     run_tilt(
@@ -115,7 +118,8 @@ def create_tomograms():
         f"{tomo_name}.tlt",
         SIRT_iterations=11,
         exclude_list=exclude_list,
-        thickness=3000
+        thickness=3000,
+        full_image=full_image
     )
     print(f"Creating SIRT tilted tomogram {tomo_name}_full_rec_SIRT_flat.mrc")
     run_tilt(
@@ -125,6 +129,7 @@ def create_tomograms():
         SIRT_iterations=11,
         exclude_list=exclude_list,
         angle_offset=angle_offset,
-        thickness=1500
+        thickness=1500,
+        full_image=full_image
     )
 
