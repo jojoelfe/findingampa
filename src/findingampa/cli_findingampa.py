@@ -173,7 +173,8 @@ def annotate_aunps():
         raise typer.Exit()
     potential_blender_paths= [
         Path("/home/elferich/Downloads/blender-4.2.0-alpha+main.bace4c9a293c-linux.x86_64-release/blender"),
-        Path("/groups/elferich/Downloads/blender-4.2.0-alpha+main.6c78f7974098-linux.x86_64-release/blender")
+        Path("/groups/elferich/Downloads/blender-4.2.0-alpha+main.6c78f7974098-linux.x86_64-release/blender"),
+        Path("/goliath/sw/blender/blender-4.2.0-alpha+main.2f67c45b650b-linux.x86_64-release/blender")
     ]
     BLENDER_PATH = None
     for path in potential_blender_paths:
@@ -191,4 +192,16 @@ def annotate_aunps():
     shutil.copy(template_file, aunp_folder)
 
     import os
-    os.system(f"{BLENDER_PATH} {aunp_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_annotate_aunps.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc")
+    os.system(f"{BLENDER_PATH} {aunp_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_annotate_aunps.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc")   
+
+    # Create model files
+    from subprocess import Popen, PIPE
+    from findingampa.utils.imod import get_tomopitch_angle_offset
+    coordinates = Path("aunps").glob("*.txt")
+    tilt_angle = get_tomopitch_angle_offset()
+    for coordinate_file in coordinates:
+        pro1 = Popen(f"point2model -sc -sp 2 -im {tomo_name}_full_rec_BP_flat.mrc {coordinate_file} {coordinate_file.with_suffix('.mod')}", stdout=PIPE, stderr=PIPE, shell=True)
+        pro1.communicate()
+        print(f"imodtrans  -ry {tilt_angle} -tz 187.5 {coordinate_file.with_suffix('.mod')} {str(coordinate_file)[:-4] + '_orig.mod'}")
+        pro2 = Popen(f"imodtrans  -ry {tilt_angle} -tz 187.5 {coordinate_file.with_suffix('.mod')} {str(coordinate_file)[:-4] + '_orig.mod'}", stdout=PIPE, stderr=PIPE, shell=True)
+        pro2.communicate()

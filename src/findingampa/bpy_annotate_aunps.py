@@ -33,6 +33,7 @@ class WritePicks(Operator):
     bl_label = "Write Saved Picks"
 
     def execute(self, context):
+        from subprocess import Popen, PIPE
         # Iterate over objects in SavedPicks collection
         saved_picks_collection = bpy.data.collections['SavedPicks']
         for obj in saved_picks_collection.objects:
@@ -41,6 +42,7 @@ class WritePicks(Operator):
             coords = [v.co for v in vertices]
             coords = np.array(coords)
             np.savetxt(f"aunps/{obj.name}.txt", coords*10.0)
+            
         return {'FINISHED'}
 
 # ------------------------------------------------------------------------
