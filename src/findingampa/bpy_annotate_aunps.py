@@ -1,4 +1,5 @@
 import bpy
+import numpy as np
 
 from bpy.types import (Panel, Operator)
 
@@ -16,7 +17,12 @@ class SaveAuto(Operator):
         saved_picks_object = auto_picks_object.copy()
         saved_picks_object.data = auto_picks_object.data.copy()
         saved_picks_object.animation_data_clear()
-        bpy.context.collection.objects.link(saved_picks_object)
+        saved_picks_collection = bpy.data.collections['SavedPicks']
+        # Get number of items in collection
+        num_items = len(saved_picks_collection.objects)
+        # Set name of saved picks object
+        saved_picks_object.name = f"SavedPicks_{num_items+1:03d}"
+        saved_picks_collection.objects.link(saved_picks_object)
         bpy.context.view_layer.objects.active = saved_picks_object
         bpy.ops.object.modifier_apply(modifier='GeometryNodes')
         return {'FINISHED'}
@@ -27,7 +33,6 @@ class WritePicks(Operator):
     bl_label = "Write Saved Picks"
 
     def execute(self, context):
-        import numpy as np
         # Iterate over objects in SavedPicks collection
         saved_picks_collection = bpy.data.collections['SavedPicks']
         for obj in saved_picks_collection.objects:
@@ -99,6 +104,12 @@ isosurfeace_object = bpy.data.objects['Isosurface']
 isosurfeace_object.modifiers[0]["Socket_2"] = tomo.object
 bpy.context.evaluated_depsgraph_get().update()
 
+# Load existing picks
+picks = Path("aunps").glob("*.txt")
+for pick in picks:
+    coords = np.loadtxt(pick)/10.0
+    new_sp_object = mn.blender.obj.create_object(coords, collection=bpy.data.collections['SavedPicks'], name=pick.stem)
+    #bpy.data.collections['SavedPicks'].objects.link(new_sp_object)
 #membrain = Path("membrain") / f"{path.name[:-4]}_MemBrain_seg_v10_alpha.ckpt_segmented.mrc"
 #print(membrain)
 #if membrain.exists():

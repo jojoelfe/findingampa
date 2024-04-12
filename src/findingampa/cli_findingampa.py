@@ -173,7 +173,7 @@ def annotate_aunps():
         raise typer.Exit()
     potential_blender_paths= [
         Path("/home/elferich/Downloads/blender-4.2.0-alpha+main.bace4c9a293c-linux.x86_64-release/blender"),
-        Path()
+        Path("/groups/elferich/Downloads/blender-4.2.0-alpha+main.6c78f7974098-linux.x86_64-release/blender")
     ]
     BLENDER_PATH = None
     for path in potential_blender_paths:
