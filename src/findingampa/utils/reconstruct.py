@@ -63,6 +63,7 @@ def run_tilt(
         SIRT_iterations: int = 0,
         thickness: int = 1000,
         full_image: str = "3370 4746",
+        final_pixelsize: float = 10.0,
 ):
     input_string = f"""
 InputProjections {aligned_tilt_series}
@@ -88,4 +89,6 @@ UseGPU 0
 """
     from subprocess import Popen, PIPE
     process = Popen("tilt -StandardInput",stdin=PIPE,stdout=PIPE,shell=True)
-    output = process.communicate(input=input_string.encode())
+    process.communicate(input=input_string.encode())
+    process2 = Popen(f"alterheader -d {final_pixelsize},{final_pixelsize},{final_pixelsize} {output}",stdin=PIPE,stdout=PIPE,shell=True)
+    process2.communicate()

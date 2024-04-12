@@ -7,7 +7,36 @@ def napari_animation():
         raise typer.Exit()
     tomo = f"{tomo_name}_full_rec_BP_flat.mrc"
 
+     from napari_animation import Animation
     import napari
+    import mrcfile
+    viewer = napari.Viewer()
+    with mrcfile.open(tomo) as mrc:
+        data = mrc.data.copy()
+    tomo_layer = viewer.add_image(data, name="tomogram")
+    tomo_layer.interpolation3d = "cubic"
+    tomo_layer.rendering = "minip"
+    animation = Animation(viewer)
+    viewer.update_console({"animation": animation})
+
+    viewer.dims.ndisplay = 3
+    viewer.camera.angles = (90.0, 0.0, 90.0)
+    animation.capture_keyframe(steps=45)
+    viewer.camera.angles = (90.0, 0.0, 90.0)
+    animation.capture_keyframe(steps=90)
+    viewer.camera.angles = (90.0, 90.0, 90.0)
+    animation.capture_keyframe(steps=90)
+    viewer.camera.angles = (0.0, 0.0, 0.0)
+    animation.capture_keyframe(steps=90)
+    viewer.camera.angles = (-90.0, -90.0, -90.0)
+    animation.capture_keyframe(steps=90)
+    viewer.camera.angles = (-180.0, -180.0, -180.0)
+    animation.capture_keyframe(steps=90)
+    viewer.camera.angles = (-270.0, -270.0, -270.0)
+    animation.capture_keyframe(steps=90)
+    viewer.camera.angles = (-270.0, -360.0, -270.0)
+    animation.capture_keyframe(steps=90)
+    animation.animate("animation.mp4", canvas_only=True)
 
 @app.command()
 def test_centerline(

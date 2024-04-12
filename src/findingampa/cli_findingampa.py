@@ -5,9 +5,9 @@ import starfile
 from pathlib import Path
 from types import SimpleNamespace
 import pandas as pd
-from findingampa.pipeline1.cli_pipeline1 import app as pipeline1_app
-from findingampa.pipeline2.cli_pipeline2 import app as pipeline2_app
-from findingampa.pipeline3.cli_pipeline3 import app as pipeline3_app
+#from findingampa.pipeline1.cli_pipeline1 import app as pipeline1_app
+#from findingampa.pipeline2.cli_pipeline2 import app as pipeline2_app
+#from findingampa.pipeline3.cli_pipeline3 import app as pipeline3_app
 from findingampa.project_management import Project, FAContext, FAGlobal, Tomogram, RelionTomogram
 from typing import Optional
 from rich import print
@@ -15,16 +15,15 @@ from rich import print
 app = typer.Typer(
 )
 
-app.registered_commands += pipeline1_app.registered_commands
-app.registered_commands += pipeline2_app.registered_commands
-app.registered_commands += pipeline3_app.registered_commands
+#app.registered_commands += pipeline1_app.registered_commands
+#app.registered_commands += pipeline2_app.registered_commands
+#app.registered_commands += pipeline3_app.registered_commands
 
 def version_callback(value: bool):
     from findingampa import __version__ 
     if value:
         typer.echo(f"Finding AMPA Version: {__version__}")
         raise typer.Exit()
-    
 
 
 @app.callback()
@@ -133,3 +132,63 @@ def create_tomograms():
         full_image=full_image
     )
 
+@app.command()
+def annotate_membranes():
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    
+    MEMBRAIN_MODEL_PATH = None
+    potential_membrain_model_paths = [
+        Path("/goliath/processing/Gouaux/CJS/software/membrain-seg/models/MemBrain_seg_v10_alpha.ckpt"),
+        Path("/home/elferich/ProcessingJE/manuscript01/relion_reconstruction/finding_ampa/static/MemBrain_seg_v10_alpha.ckpt")
+    ]
+    for path in potential_membrain_model_paths:
+        if path.exists():
+            MEMBRAIN_MODEL_PATH = path
+            break
+
+    from membrain_seg.segmentation.segment import segment
+
+    membrain_output_path = Path("membrain" )
+    membrain_output_path.mkdir(parents=True, exist_ok=True)
+    
+    segmentation_file = segment(
+        tomogram_path=f"{tomo_name}_full_rec_BP_flat.mrc",
+        ckpt_path=MEMBRAIN_MODEL_PATH,
+        out_folder=membrain_output_path,
+        segmentation_threshold=0.0,
+        store_probabilities=True
+    )
+    print(f"Segmentation saved to {segmentation_file}")
+
+@app.command()
+def annotate_aunps():
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    potential_blender_paths= [
+        Path("/home/elferich/Downloads/blender-4.2.0-alpha+main.bace4c9a293c-linux.x86_64-release/blender"),
+        Path()
+    ]
+    BLENDER_PATH = None
+    for path in potential_blender_paths:
+        if path.exists():
+            BLENDER_PATH = path
+            break
+    if BLENDER_PATH is None:
+        typer.echo("Blender not found")
+        raise typer.Exit()
+    template_file = Path(__file__).parent / "aunp_template.blend"
+    aunp_folder = Path("aunps")
+    aunp_folder.mkdir(parents=True, exist_ok=True)
+    #Copy template file into aunp_folder
+    import shutil
+    shutil.copy(template_file, aunp_folder)
+
+    import os
+    os.system(f"{BLENDER_PATH} {aunp_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_annotate_aunps.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc")
