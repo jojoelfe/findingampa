@@ -205,3 +205,37 @@ def annotate_aunps():
         print(f"imodtrans  -ry {tilt_angle} -tz 187.5 {coordinate_file.with_suffix('.mod')} {str(coordinate_file)[:-4] + '_orig.mod'}")
         pro2 = Popen(f"imodtrans  -ry {tilt_angle} -tz 187.5 {coordinate_file.with_suffix('.mod')} {str(coordinate_file)[:-4] + '_orig.mod'}", stdout=PIPE, stderr=PIPE, shell=True)
         pro2.communicate()
+
+@app.command()
+def plot_voxel_histogram(
+    tomogram_type: str = "_full_rec_BP_flat.mrc",
+    output_file: Optional[str] = None
+):
+    import mrcfile
+    import matplotlib.pyplot as plt
+    import numpy as np
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+
+    with mrcfile.open(tomo_name+tomogram_type) as mrc:
+        data = mrc.data
+    # Only use center of the data
+    z, y, x = data.shape
+    data = np.max(data) - data
+    data = data[z//2-z//3:z//2+z//3,y//2-y//3:y//2+y//3,x//2-x//3:x//2+x//3]
+    
+    hist = plt.hist(data.flatten(), bins=500, density=True)
+    # Overtlay an gaussian fit
+    from scipy.stats import norm
+    mean, std = norm.fit(data.flatten())
+    xmin, xmax = plt.xlim()
+    x = np.linspace(xmin, xmax, 100)
+    p = norm.pdf(x, mean, std)
+    plt.plot(x, p, 'k', linewidth=2)
+    if output_file is not None:
+        plt.savefig(output_file)
+    else:
+        plt.show()

@@ -39,7 +39,8 @@ dependencies = [
  "colorcet",
  "mdocfile",
  "napari[all]",
- "napari_animation"
+ "napari_animation",
+ "pymeshlab"
 ]
 
 [project.optional-dependencies]
