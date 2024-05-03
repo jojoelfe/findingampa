@@ -221,11 +221,12 @@ def plot_voxel_histogram(
         raise typer.Exit()
 
     with mrcfile.open(tomo_name+tomogram_type) as mrc:
-        data = mrc.data
+        data = mrc.data.copy()
     # Only use center of the data
     z, y, x = data.shape
-    data = np.max(data) - data
-    data = data[z//2-z//3:z//2+z//3,y//2-y//3:y//2+y//3,x//2-x//3:x//2+x//3]
+    data -= np.mean(data.flatten())
+    data /= -np.std(data.flatten())
+    #data = data[z//2-z//3:z//2+z//3,y//2-y//3:y//2+y//3,x//2-x//3:x//2+x//3]
     
     hist = plt.hist(data.flatten(), bins=500, density=True)
     # Overtlay an gaussian fit
@@ -235,7 +236,48 @@ def plot_voxel_histogram(
     x = np.linspace(xmin, xmax, 100)
     p = norm.pdf(x, mean, std)
     plt.plot(x, p, 'k', linewidth=2)
+    plt.ylabel("Density")
+    plt.xlabel("Voxel Value (Z-Score)")
     if output_file is not None:
         plt.savefig(output_file)
     else:
         plt.show()
+
+@app.command()
+def plot_isosurface_histogram(
+    threshold: float = typer.Argument(7.0),
+    tomogram_type: str = "_full_rec_BP_flat.mrc",
+    output_file: Optional[str] = None
+):
+    
+
+
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    potential_blender_paths= [
+        Path("/home/elferich/Downloads/blender-4.2.0-alpha+main.bace4c9a293c-linux.x86_64-release/blender"),
+        Path("/groups/elferich/Downloads/blender-4.2.0-alpha+main.6c78f7974098-linux.x86_64-release/blender"),
+        Path("/goliath/sw/blender/blender-4.2.0-alpha+main.2f67c45b650b-linux.x86_64-release/blender")
+    ]
+    BLENDER_PATH = None
+    for path in potential_blender_paths:
+        if path.exists():
+            BLENDER_PATH = path
+            break
+    if BLENDER_PATH is None:
+        typer.echo("Blender not found")
+        raise typer.Exit()
+    template_file = Path(__file__).parent / "histogram_template_utility.blend"
+    aunp_folder = Path("histograms")
+    aunp_folder.mkdir(parents=True, exist_ok=True)
+    #Copy template file into aunp_folder
+    import shutil
+    shutil.copy(template_file, aunp_folder)
+
+    import os
+    os.system(f"{BLENDER_PATH} {aunp_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_isosurface_histogram.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc --threshold {threshold}")   
+
+    
