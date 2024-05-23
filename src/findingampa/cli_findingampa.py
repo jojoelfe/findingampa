@@ -165,6 +165,49 @@ def annotate_membranes():
     print(f"Segmentation saved to {segmentation_file}")
 
 @app.command()
+def smooth_membranes():
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    from subprocess import Popen, PIPE
+    pro1 = Popen(f"trimvol -c 0,1 membrain/{tomo_name}_full_rec_BP_flat_MemBrain_seg_v10_alpha.ckpt_segmented.mrc membrain/scaled.mrc", stdout=PIPE, stderr=PIPE, shell=True)
+    pro1.communicate()
+    pro2 = Popen(f"clip smooth -l 4.0 -m float membrain/scaled.mrc membrain/{tomo_name}_full_rec_BP_flat_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc", stdout=PIPE, stderr=PIPE, shell=True)
+    pro2.communicate()
+
+@app.command()
+def annotate_ampa_positions():
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    potential_blender_paths= [
+        Path("/home/elferich/Downloads/blender-4.2.0-alpha+main.bace4c9a293c-linux.x86_64-release/blender"),
+        Path("/groups/elferich/Downloads/blender-4.2.0-alpha+main.6c78f7974098-linux.x86_64-release/blender"),
+        Path("/goliath/sw/blender/blender-4.2.0-alpha+main.2f67c45b650b-linux.x86_64-release/blender")
+    ]
+    BLENDER_PATH = None
+    for path in potential_blender_paths:
+        if path.exists():
+            BLENDER_PATH = path
+            break
+    if BLENDER_PATH is None:
+        typer.echo("Blender not found")
+        raise typer.Exit()
+    template_file = Path(__file__).parent / "ampa_position_template.blend"
+    ampa_folder = Path("ampa_positions")
+    ampa_folder.mkdir(parents=True, exist_ok=True)
+    #Copy template file into aunp_folder
+    import shutil
+    shutil.copy(template_file, ampa_folder)
+
+    import os
+    os.system(f"{BLENDER_PATH} {ampa_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_ampa_positions.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc")   
+
+@app.command()
 def annotate_aunps():
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem

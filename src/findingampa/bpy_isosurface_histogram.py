@@ -20,39 +20,51 @@ class PlotHistogram(Operator):
     bl_label = "Plot Histogram"
 
     def execute(self, context):
-        auto_picks_object = bpy.data.objects['Coordinates.001']
-        saved_picks_object = auto_picks_object.copy()
-        saved_picks_object.data = auto_picks_object.data.copy()
-        saved_picks_object.animation_data_clear()
-        saved_picks_collection = bpy.data.collections['SavedPicks']
-        # Get number of items in collection
-        num_items = len(saved_picks_collection.objects)
-        # Set name of saved picks object
-        saved_picks_object.name = f"SavedPicks_{num_items+1:03d}"
-        saved_picks_collection.objects.link(saved_picks_object)
-        bpy.context.view_layer.objects.active = saved_picks_object
-        bpy.ops.object.modifier_apply(modifier='GeometryNodes')
-        volumes = mn.blender.obj.get_attribute(saved_picks_object, "volume")
-        logbins = np.logspace(np.log10(0.001),np.log10(1000000000),30)
-        cnts, values, bars = plt.hist(volumes, bins=logbins)
-        plt.xscale('log')
+        for threshold in [7.,6.,5.,4.5,4.]:
+            plt.clf()
+            isosurface_object = bpy.data.objects['Isosurface']
+            isosurface_object.modifiers[0]["Socket_3"] = threshold
+            bpy.context.evaluated_depsgraph_get().update()
+            isosurface_object.modifiers["GeometryNodes"].show_viewport = False
+            isosurface_object.modifiers["GeometryNodes"].show_viewport = True
+            bpy.context.scene.render.filepath = f"render_{threshold}.png"
+            bpy.ops.render.render(write_still=True)
+            auto_picks_object = bpy.data.objects['Coordinates.001']
+            saved_picks_object = auto_picks_object.copy()
+            saved_picks_object.data = auto_picks_object.data.copy()
+            saved_picks_object.animation_data_clear()
+            saved_picks_collection = bpy.data.collections['SavedPicks']
+            # Get number of items in collection
+            num_items = len(saved_picks_collection.objects)
+            # Set name of saved picks object
+            saved_picks_object.name = f"SavedPicks_{num_items+1:03d}"
+            saved_picks_collection.objects.link(saved_picks_object)
+            bpy.context.view_layer.objects.active = saved_picks_object
+            bpy.ops.object.modifier_apply(modifier='GeometryNodes')
+            volumes = mn.blender.obj.get_attribute(saved_picks_object, "volume")
+            print(volumes)
+            logbins = np.logspace(np.log10(10),np.log10(10000000),40)
+            cnts, values, bars = plt.hist(volumes, bins=logbins)
+            plt.xscale('log')
 
-        for i, (cnt, value, bar) in enumerate(zip(cnts, values, bars)):
-            if value < np.power(10, 3.5):
-                bar.set_facecolor('grey')
-                continue
-            if value < np.power(10, 4.5):
+            for i, (cnt, value, bar) in enumerate(zip(cnts, values, bars)):
+                if value < np.power(10, 3.5):
+                    bar.set_facecolor('grey')
+                    continue
+                if value < np.power(10, 4.5):
+                    bar.set_facecolor('red')
+                    continue
+                if value < np.power(10, 5.5):
+                    bar.set_facecolor('blue')
+                    continue
                 bar.set_facecolor('green')
-                continue
-            if value < np.power(10, 5.5):
-                bar.set_facecolor('blue')
-                continue
-            bar.set_facecolor('red')
-        # X label cubic angstrom (use correct symbol)
-        plt.xlabel('Volume (\u212B^3)')
-        plt.ylabel('Count')
-        # Change colors for certain histogram bars
-        plt.show()
+            # X label cubic angstrom (use correct symbol)
+            plt.xlabel('Volume (\u212B^3)')
+            plt.ylabel('Count')
+            # Change colors for certain histogram bars
+            plt.savefig(f"histogram_{threshold}.png")
+            # Set the output path for render
+            
         return {'FINISHED'}
     
 
