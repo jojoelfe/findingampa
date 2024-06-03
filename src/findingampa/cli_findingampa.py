@@ -346,16 +346,28 @@ def add_to_relion_star(
     rlnTomoName = tomo_name
     rlnTomoTiltSeriesName = Path(tomo_name+'.mrc').absolute()
     rlnTomoImportCtfPlotterFile = Path(tomo_name+'.defocus').absolute()
-    print(rlnTomoImportCtfPlotterFile.exists())
     rlnTomoImportImodDir = Path.cwd().absolute()
-    
     rlnTomoImportFractionalDose = 4.55
     rlnTomoImportOrderList = Path.cwd().parent.parent.parent.parent / "ProcessedData" / "tomograms" / tomo_name / (tomo_name + ".csv")
-    print(rlnTomoImportOrderList.exists())
     rlnSphericalAberration = 2.7
     rlnTomoImportCulledFile = Path(tomo_name+'_relionculled.mrc').absolute()
     relion_star.loc[len(relion_star)] = [rlnTomoName, rlnTomoTiltSeriesName, rlnTomoImportCtfPlotterFile, rlnTomoImportImodDir, rlnTomoImportFractionalDose, rlnTomoImportOrderList, rlnSphericalAberration, rlnTomoImportCulledFile]
     starfile.write(relion_star,relion_star_path)
+    print(f"Added {tomo_name} to {relion_star_path}")
+    #Change THICKNESS in tilt.com
+    tilt_com = Path.cwd() / "tilt.com"
+    with open(tilt_com, "r") as f:
+        lines = f.readlines()
+    # Backup tilt.com
+    with open(tilt_com.with_suffix(".bakfa"), "w") as f:
+        f.writelines(lines)
+    for i, line in enumerate(lines):
+        if "THICKNESS" in line:
+            lines[i] = f"THICKNESS 3000\n"
+    with open(tilt_com, "w") as f:
+        f.writelines(lines)
+    print(f"Changed THICKNESS in {tilt_com}")
+
 
 @app.command()
 def add_ampa_positions_to_relion_star(
