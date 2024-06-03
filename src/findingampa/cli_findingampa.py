@@ -174,7 +174,7 @@ def smooth_membranes():
     from subprocess import Popen, PIPE
     pro1 = Popen(f"trimvol -c 0,1 membrain/{tomo_name}_full_rec_BP_flat_MemBrain_seg_v10_alpha.ckpt_segmented.mrc membrain/scaled.mrc", stdout=PIPE, stderr=PIPE, shell=True)
     pro1.communicate()
-    pro2 = Popen(f"clip smooth -l 4.0 -m float membrain/scaled.mrc membrain/{tomo_name}_full_rec_BP_flat_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc", stdout=PIPE, stderr=PIPE, shell=True)
+    pro2 = Popen(f"clip smooth -l 4.0 -m float membrain/scaled.mrc membrain/{tomo_name}_full_rec_BP_flat_MemBrain_seg_v10_alpha_ckpt_segmented_smooth.mrc", stdout=PIPE, stderr=PIPE, shell=True)
     pro2.communicate()
 
 @app.command()
@@ -198,14 +198,21 @@ def annotate_ampa_positions():
         typer.echo("Blender not found")
         raise typer.Exit()
     template_file = Path(__file__).parent / "ampa_position_template.blend"
+    
     ampa_folder = Path("ampa_positions")
     ampa_folder.mkdir(parents=True, exist_ok=True)
+    instance_template_file = ampa_folder / "ampa_position_template.blend"
     #Copy template file into aunp_folder
     import shutil
-    shutil.copy(template_file, ampa_folder)
+    if instance_template_file.exists():
+        should_setup = False
+    else:
+        shutil.copy(template_file, ampa_folder)
+        should_setup = True
 
     import os
-    os.system(f"{BLENDER_PATH} {ampa_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_ampa_positions.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc")   
+    print(should_setup)
+    os.system(f"{BLENDER_PATH} {ampa_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_ampa_positions.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc {'--setup' if should_setup else ''} --findingampa {Path(__file__).parent.parent}")   
 
 @app.command()
 def annotate_aunps():
@@ -323,4 +330,51 @@ def plot_isosurface_histogram(
     import os
     os.system(f"{BLENDER_PATH} {aunp_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_isosurface_histogram.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc --threshold {threshold}")   
 
+@app.command()
+def add_to_relion_star(
+    relion_star_path: Path,
+):
+    if not relion_star_path.exists():
+        relion_star = pd.DataFrame(columns=["rlnTomoName", "rlnTomoTiltSeriesName", "rlnTomoImportCtfPlotterFile", "rlnTomoImportImodDir", "rlnTomoImportFractionalDose", "rlnTomoImportOrderList", "rlnSphericalAberration", "rlnTomoImportCulledFile"])
+    else:
+        relion_star = starfile.read(relion_star_path)
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    rlnTomoName = tomo_name
+    rlnTomoTiltSeriesName = Path(tomo_name+'.mrc').absolute()
+    rlnTomoImportCtfPlotterFile = Path(tomo_name+'.defocus').absolute()
+    print(rlnTomoImportCtfPlotterFile.exists())
+    rlnTomoImportImodDir = Path.cwd().absolute()
     
+    rlnTomoImportFractionalDose = 4.55
+    rlnTomoImportOrderList = Path.cwd().parent.parent.parent.parent / "ProcessedData" / "tomograms" / tomo_name / (tomo_name + ".csv")
+    print(rlnTomoImportOrderList.exists())
+    rlnSphericalAberration = 2.7
+    rlnTomoImportCulledFile = Path(tomo_name+'_relionculled.mrc').absolute()
+    relion_star.loc[len(relion_star)] = [rlnTomoName, rlnTomoTiltSeriesName, rlnTomoImportCtfPlotterFile, rlnTomoImportImodDir, rlnTomoImportFractionalDose, rlnTomoImportOrderList, rlnSphericalAberration, rlnTomoImportCulledFile]
+    starfile.write(relion_star,relion_star_path)
+
+@app.command()
+def add_ampa_positions_to_relion_star(
+    positions_set: str,
+    relion_star_path: Path
+):
+    if not relion_star_path.exists():
+        relion_star = pd.DataFrame(columns=["rlnTomoName", "rlnTomoImportParticleFile"])
+    else:
+        relion_star = starfile.read(relion_star_path)
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    rlnTomoName = tomo_name
+    rlnTomoImportParticleFile = Path.cwd() / "ampa_positions" / f"{positions_set}.star"
+    if not rlnTomoImportParticleFile.exists():
+        typer.echo(f"File {rlnTomoImportParticleFile} does not exist")
+        raise typer.Exit()
+    relion_star.loc[len(relion_star)] = [rlnTomoName, rlnTomoImportParticleFile]
+    starfile.write(relion_star,relion_star_path)
