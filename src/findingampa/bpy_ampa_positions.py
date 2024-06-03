@@ -22,10 +22,14 @@ class SaveAMPA(Operator):
     bl_label = "Save AMPA positions"
 
     def execute(self, context):
-        import starfile
+        import molecularnodes as mn
+        try:
+            import starfile
+        except ModuleNotFoundError:
+            mn.pkg.install_package('starfile')
+            import starfile
         import bpy
         import numpy as np
-        import molecularnodes as mn
         import pandas as pd
         try:
             from scipy.spatial.transform import Rotation as R
