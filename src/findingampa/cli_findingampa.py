@@ -435,7 +435,7 @@ def create_bin_3dctf_tomogram(
     pro2.wait()
 
     # run clip rotx
-    pro3 = Popen(f"clip rotx {tomo_name}_3dctf_rec.mrc {tomo_name}_SIRT_3DCTF_BIN{bin_factor}.mrc", shell=True)
+    pro3 = Popen(f"clip rotx {tomo_name}_3dctf_rec.mrc {tomo_name}_full_rec_{'SIRT' if FakeSirtIterations > 0 else 'BP'}_3DCTF_BIN{bin_factor}.mrc", shell=True)
     pro3.wait()
 
     
