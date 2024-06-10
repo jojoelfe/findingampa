@@ -390,3 +390,53 @@ def add_ampa_positions_to_relion_star(
         raise typer.Exit()
     relion_star.loc[len(relion_star)] = [rlnTomoName, rlnTomoImportParticleFile]
     starfile.write(relion_star,relion_star_path)
+
+@app.command()
+def create_bin_3dctf_tomogram(
+    bin_factor: int = typer.Option(2),
+    FakeSirtIterations: int = typer.Option(8),
+    num_gpus: int = typer.Option(1),
+):
+    from findingampa.utils.imod import check_ccderaser
+
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    
+    remove_beads = check_ccderaser(tomo_name)
+
+    #Change THICKNESS in tilt.com
+    tilt_com = Path.cwd() / "tilt.com"
+    with open(tilt_com, "r") as f:
+        lines = f.readlines()
+    # Backup tilt.com
+    with open(tilt_com.with_suffix(".bakfa"), "w") as f:
+        f.writelines(lines)
+    for i, line in enumerate(lines):
+        if "THICKNESS" in line:
+            lines[i] = f"THICKNESS 3000\n"
+    if FakeSirtIterations > 0:
+        lines.insert(20,f"FakeSirtIterations {FakeSirtIterations}\n")
+    with open(tilt_com, "w") as f:
+        f.writelines(lines)
+    
+    # Run 3dctfsetup
+    from subprocess import Popen, PIPE
+    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -un -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
+    out, error = pro1.communicate()
+    print(out)
+    print(error)
+
+    # Run 3dctf
+    gpustrings = [f":{str(i+1)}" for i in range(num_gpus)]
+    pro2 = Popen(f"processchunks -G localhost{''.join(gpustrings)} ctf3d", shell=True)
+    pro2.wait()
+
+    # run clip rotx
+    pro3 = Popen(f"clip rotx {tomo_name}_3dctf_rec.mrc {tomo_name}_SIRT_3DCTF_BIN{bin_factor}.mrc", shell=True)
+    pro3.wait()
+
+    
+

@@ -33,3 +33,13 @@ def get_full_image():
                 full_image = ' '.join(line.split()[-2:])
     
     return full_image
+
+def check_ccderaser(tomo_name):
+    import subprocess
+    # Run header on ${tomo_name}_ali.mrc and check if the output contains CCDERASER
+    header = subprocess.check_output(['header', f'{tomo_name}_ali.mrc'])
+    if 'CCDERASER' in header.decode('utf-8'):
+        return True
+    else:
+        return False
+    
