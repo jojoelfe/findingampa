@@ -424,13 +424,14 @@ def create_bin_3dctf_tomogram(
     
     # Run 3dctfsetup
     from subprocess import Popen, PIPE
-    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -un -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
+    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -un -parallel -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
     out, error = pro1.communicate()
     print(out)
     print(error)
 
     # Run 3dctf
     gpustrings = [f":{str(i+1)}" for i in range(num_gpus)]
+    print(f"processchunks -G localhost{''.join(gpustrings)} ctf3d")
     pro2 = Popen(f"processchunks -G localhost{''.join(gpustrings)} ctf3d", shell=True)
     pro2.wait()
 
