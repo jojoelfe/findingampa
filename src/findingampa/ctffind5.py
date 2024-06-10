@@ -35,6 +35,23 @@ class CTfFind5Input(BaseModel):
 app = typer.Typer()
 
 
+@app.command()
+def run_multiple(
+    max_workers: int = typer.Option(20, help="Number of workers to use"),
+    sa: float = typer.Option(0.01, help="Spherical aberration in mm"),
+    folders: list[Path] = typer.Argument(None)
+    ):
+    from concurrent.futures import ThreadPoolExecutor
+    print(folders)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Start the load operations and mark each future with the URL
+        future_to_tilt_series = {executor.submit(run_single_tomogram, tilt_series_folder=folder, sa=sa, run_ctffind5=True): folder for folder in folders}
+        for future in track(future_to_tilt_series, description="Processing tilt series"):
+            row = future_to_tilt_series[future]
+            try:
+                future.result()
+            except Exception as exc:
+                print(f"Processing {row['Tomogram name']} generated an exception: {exc}")
 
 
 
@@ -93,6 +110,18 @@ def analyze_csv(
             with open(f"/scratch/pompeii/elferich/gouaux_tomo/ProcessingJE/ctffind5/{row['Tomogram name']}/ctffind5_fit.csv", "w") as f:
                 f.write(f"{row['Tomogram name']},0,0,0,0,0\n")
     
+@app.command()
+def analyze_multiple(
+    max_workers: int = typer.Option(20, help="Number of workers to use"),
+    sa: float = typer.Option(0.01, help="Spherical aberration in mm"),
+    folders: list[Path] = typer.Argument(None)
+    ):
+    for folder in folders:
+        try:
+            analyze_single_tomogram(folder)
+            print(f"Processed {folder.name}")
+        except Exception as exc:
+            print(f"Processing {folder.name} generated an exception: {exc}")
 
 @app.command()
 def run_single_tomogram(
@@ -104,8 +133,8 @@ def run_single_tomogram(
     from subprocess import Popen, PIPE
     
 
-    output_path = Path("/scratch/pompeii/elferich/gouaux_tomo/ProcessingJE/ctffind5/")
-    cistem_path = Path("/scratch/pompeii/elferich/gouaux_tomo/sw/")
+    output_path = Path("/goliath/processing/Gouaux/CJS/BestTomo/ProcessingJE/ctffind5")
+    cistem_path = Path("/goliath/processing/Gouaux/CJS/BestTomo/ProcessingJE")
 
     output_path = output_path / tilt_series_folder.name
     output_path.mkdir(parents=True, exist_ok=True)
@@ -135,7 +164,7 @@ def analyze_single_tomogram(
     from scipy.spatial.transform import Rotation as R
 
 
-    output_path = Path("/scratch/pompeii/elferich/gouaux_tomo/ProcessingJE/ctffind5/")
+    output_path = Path("/goliath/processing/Gouaux/CJS/BestTomo/ProcessingJE/ctffind5")
 
     output_path = output_path / tilt_series_folder.name
     ctffind5_info_overall = np.loadtxt(output_path / 'diagnostic_output.txt')
