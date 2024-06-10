@@ -440,4 +440,33 @@ def create_bin_3dctf_tomogram(
     pro3.wait()
 
     
+@app.command()
+def write_dynamo_table(
+    positions_set: str,
+):
+    import dynamotable
+    import starfile
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    rlnTomoImportParticleFile = Path.cwd() / "ampa_positions" / f"{positions_set}.star"
+    relion_data = starfile.read(rlnTomoImportParticleFile)['particles']
+
+    dynamo_dicts = [
+        {
+            "x": x["rlnCoordinateX"] * 2.0,
+            "y": x["rlnCoordinateY"] * 2.0,
+            "z": x["rlnCoordinateZ"] * 2.0,
+            "tag": i+1,
+            "tdrot": x["rlnAnglePsi"] + 90,
+            "tilt": - x["rlnAngleTilt"],
+            "narot": x["rlnAngleRot"] + 270,
+        } for i, x in relion_data.iterrows()
+    ]
+
+    dynamo_data = pd.DataFrame(dynamo_dicts)
+    dynamotable.write(dynamo_data, Path.cwd() / "ampa_positions" / f"{positions_set}.tbl")
+
 
