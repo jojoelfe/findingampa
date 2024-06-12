@@ -396,6 +396,7 @@ def create_bin_3dctf_tomogram(
     bin_factor: int = typer.Option(2),
     FakeSirtIterations: int = typer.Option(8),
     num_gpus: int = typer.Option(1),
+    never_erase: bool = False,
 ):
     from findingampa.utils.imod import check_ccderaser
 
@@ -406,6 +407,8 @@ def create_bin_3dctf_tomogram(
         raise typer.Exit()
     
     remove_beads = check_ccderaser(tomo_name)
+    if never_erase:
+        remove_beads = False
 
     #Change THICKNESS in tilt.com
     tilt_com = Path.cwd() / "tilt.com"
@@ -424,7 +427,7 @@ def create_bin_3dctf_tomogram(
     
     # Run 3dctfsetup
     from subprocess import Popen, PIPE
-    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -un -parallel -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
+    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -un -te /tmp/3dctf -parallel -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
     out, error = pro1.communicate()
     print(out)
     print(error)
