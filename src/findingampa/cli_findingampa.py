@@ -469,4 +469,46 @@ def write_dynamo_table(
     dynamo_data = pd.DataFrame(dynamo_dicts)
     dynamotable.write(dynamo_data, Path.cwd() / "ampa_positions" / f"{positions_set}.tbl")
 
+@app.command()
+def dynamo_table_to_relion4_star(
+    dynamo_table: Path,
+    tomo_doc: Path,
+    particle_star_file: Path
+):
+    import dynamotable
+    import starfile
+    import pandas
+
+    dynamo_data = dynamotable.read(dynamo_table)
+
+    tomo_data = pd.read_csv(tomo_doc,delim_whitespace=True,header=None,names=['tomo','tomo_file'],dtype={'tomo':'int64'})
+
+    combined = dynamo_data.merge(tomo_data,on='tomo',how='inner')
+    combined['rlnCoordinateX'] = (combined['x'] + combined['dx']) * 2
+    combined['rlnCoordinateY'] = (combined['y'] + combined['dy']) * 2
+    combined['rlnCoordinateZ'] = (combined['z'] + combined['dz']) * 2
+    combined['rlnAngleRot'] = combined['narot'] - 270
+    combined['rlnAngleTilt'] = - combined['tilt']
+    combined['rlnAnglePsi'] = combined['tdrot'] - 90
+    combined['rlnTomoName'] = combined['tomo_file'].str.split('/').str[0]
+    
+    relion_df = combined[['rlnCoordinateX','rlnCoordinateY','rlnCoordinateZ','rlnAngleRot','rlnAngleTilt','rlnAnglePsi','rlnTomoName']]
+
+    print(relion_df)
+
+
+   
+
+    starfile.write(relion_df, particle_star_file)
+
+
+
+    combined['x'] *=4
+    combined['y'] *=4
+    combined['z'] *=4
+
+    print(combined[combined['tomo'] == 1][['x','y','z','tdrot','tilt','narot']])
+
+
+
 
