@@ -397,9 +397,11 @@ def create_bin_3dctf_tomogram(
     FakeSirtIterations: int = typer.Option(8),
     num_gpus: int = typer.Option(1),
     never_erase: bool = False,
+    delete_aunps: bool = False
 ):
     from findingampa.utils.imod import check_ccderaser
-
+    from subprocess import Popen, PIPE
+    import shutil
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
     except IndexError:
@@ -424,10 +426,29 @@ def create_bin_3dctf_tomogram(
         lines.insert(20,f"FakeSirtIterations {FakeSirtIterations}\n")
     with open(tilt_com, "w") as f:
         f.writelines(lines)
-    
+    if delete_aunps:
+        models = list(Path("aunps/").glob("SavedPicks_*_orig.mod"))
+        if len(models) > 1:
+            pro = Popen(f"imodjoin -n {' '.join([str(m) for m in models])} aunps/combined_savedpicks.mod", shell=True)
+            pro.wait()
+        else:
+            shutil.copy(models[0],"aunps/combined_savedpicks.mod")
+        pro = Popen(f"submfg tilt.com",shell=True)
+        pro.wait()
+        pro = Popen(f"imodtrans -i {tomo_name}_full_rec_BP.mrc aunps/combined_savedpicks.mod aunps/combined_savedpicks_asim.mod",shell=True)
+        pro.wait()
+        pro = Popen(f"imodtrans -R 0 aunps/combined_savedpicks_asim.mod aunps/combined_savedpicks_rotxed.mod",shell=True)
+        pro.wait()
+        pro = Popen(f"imodtrans -I {tomo_name}_full_rec.mrc aunps/combined_savedpicks_rotxed.mod aunps/combined_savedpicks_rotxed_asrec.mod",shell=True)
+        pro.wait()
+        pro = Popen(f"rawtiltcoords -ro {tomo_name} -vo {tomo_name}_full_rec.mrc -ce aunps/combined_savedpicks_rotxed_asrec.mod -ou aunps_tiltseries.mod -re 0",shell=True)
+        pro.wait()
+        pro = Popen(f"ccderaser -ExpandCircleIterations 3 -InputFile {tomo_name}.mrc -OutputFile {tomo_name}_aunperase.mrc -ModelFile aunps_tiltseries.mod -BetterRadius 7.0 -PolynomialOrder ' -1' -CircleObjects / -MergePatches 1",shell=True)
+        pro.wait()
+        
     # Run 3dctfsetup
-    from subprocess import Popen, PIPE
-    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -un -te /tmp/3dctf -parallel -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
+    
+    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -ra {tomo_name}{'_aunperase' if delete_aunps else ''}.mrc -un -parallel -te /tmp/3dctf -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
     out, error = pro1.communicate()
     print(out)
     print(error)
@@ -439,7 +460,7 @@ def create_bin_3dctf_tomogram(
     pro2.wait()
 
     # run clip rotx
-    pro3 = Popen(f"clip rotx {tomo_name}_3dctf_rec.mrc {tomo_name}_full_rec_{'SIRT' if FakeSirtIterations > 0 else 'BP'}_3DCTF_BIN{bin_factor}.mrc", shell=True)
+    pro3 = Popen(f"clip rotx {tomo_name}_3dctf_rec.mrc {tomo_name}_full_rec_{'SIRT' if FakeSirtIterations > 0 else 'BP'}_3DCTF_BIN{bin_factor}{'_AUNPERASED' if delete_aunps else ''}.mrc", shell=True)
     pro3.wait()
 
     
