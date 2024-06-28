@@ -423,9 +423,11 @@ def create_bin_3dctf_tomogram(
     for i, line in enumerate(lines):
         if "THICKNESS" in line:
             lines[i] = f"THICKNESS 3000\n"
+    newlines = []
     for i, line in enumerate(lines):
-        if "FakeSirtIterations" in line:
-            lines.pop(i)
+        if "FakeSirtIterations" not in line:
+            newlines.append(line)
+    lines = newlines
     if FakeSirtIterations > 0:
         lines.insert(20,f"FakeSirtIterations {FakeSirtIterations}\n")
     with open(tilt_com, "w") as f:
