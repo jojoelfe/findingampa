@@ -43,3 +43,19 @@ def check_ccderaser(tomo_name):
     else:
         return False
     
+def read_transforms_from_tomo_to_tilt(tlt_file, xf_file):
+    import pandas as pd
+    import numpy as np
+
+    tilt_angles = pd.read_csv(tlt_file, sep="\s+", header=None)[0].to_numpy()
+
+    transforms = pd.read_csv(xf_file, sep="\s+", header=None).to_numpy()
+    transforms = transforms.reshape(-1, 2, 3, order="F")
+    transforms = np.append(transforms, np.tile(np.array([0,0,1]),transforms.shape[0]).reshape(transforms.shape[0],1,3), axis=1)
+    #print(transforms[0])
+    #transforms = np.linalg.inv(transforms)
+    #print(transforms[0])
+    rotation_angles = np.rad2deg(np.arctan2(transforms[:,0,1], transforms[:,0,0]))
+    #print(np.rad2deg(rotation_angles))
+    translations = transforms[:,[0,1],2]
+    return tilt_angles, rotation_angles, translations

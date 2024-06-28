@@ -48,6 +48,25 @@ def project_aunp_model_libtilt(aunps, matrix, im_shape, r, device):
     projection = F.conv2d(projection[None,None],circle[None,None],padding='same')
     return projection[0,0], circle
 
+def aunp_to_image2d(coordinate_projection, im_shape, r, device):
+    from libtilt.atomic_models import coordinates_to_image_2d
+    import torch.nn.functional as F
+    coordinate_projection = torch.tensor(coordinate_projection,device=device)
+    projection = coordinates_to_image_2d(coordinates=coordinate_projection, image_shape=im_shape, yx=False)
+    y = torch.arange(0, 20, device=device)
+    x = torch.arange(0, 20, device=device)
+    grid_y, grid_x = torch.meshgrid(y, x)
+    temp_y = grid_y - 9.5
+    temp_x = grid_x - 9.5
+    # Create the mask in-place
+    circle = (temp_x.pow_(2).add_(temp_y.pow_(2)) <= r*r) * 1.0
+    #circle = shift_2d(circle, shifts=torch.tensor([-10, -10],device=device))
+    #plt.imshow(circle.cpu()[-20:,-20:])
+    del grid_x, grid_y, temp_x, temp_y
+    torch.cuda.synchronize()
+    projection = F.conv2d(projection[None,None],circle[None,None],padding='same')
+    return projection[0,0], circle
+
 def compare_mine_and_libtilt(
         ctx: FAContext,
         tomogram_name: str,

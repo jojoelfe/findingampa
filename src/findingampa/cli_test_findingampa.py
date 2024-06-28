@@ -1,0 +1,308 @@
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning) 
+import typer
+import starfile
+from pathlib import Path
+from types import SimpleNamespace
+import pandas as pd
+
+from findingampa.project_management import Project, FAContext, FAGlobal, Tomogram, RelionTomogram
+from typing import Optional
+from rich import print
+
+app = typer.Typer(
+)
+
+def version_callback(value: bool):
+    from findingampa import __version__ 
+    if value:
+        typer.echo(f"Finding AMPA Version: {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    ctx: FAContext,
+    project: Path = typer.Option(None, help="Path to wanted project file",rich_help_panel="Expert Options"),
+    imod_path: Path = typer.Option("", help="Path to IMOD binaries"),
+    version: bool = typer.Option(None, "--version", callback=version_callback, is_eager=True),
+):
+    """Finding AMPA processing pipeline"""
+    if project is None:
+        project = Path.cwd() / "finding_ampa" / "finding_ampa_project.star"
+        if not project.exists():
+            ctx.obj = SimpleNamespace(project = None, imod_path = imod_path, project_path = None), 
+            return
+    project_object = starfile.read(project,always_dict=True)
+    project_object["data"] = project_object["data"].apply(lambda x: x.to_dict(),axis=1).to_list()
+    project_object = Project(**project_object)
+    relion_tomograms = starfile.read(project_object.settings.FARelionTomoStar)["global"]
+    relion_tomograms = {x["rlnTomoName"]: RelionTomogram(**x) for i, x in relion_tomograms.iterrows()}
+    ctx.obj = FAGlobal(project = project_object, tomograms = project_object.data, project_path = project, project_directory = Path.cwd() / "finding_ampa", relion_tomograms = relion_tomograms)
+
+@app.command()
+def test_imod_backprojection(
+    x_offset:float,
+    y_offset:float,
+    z_offset:float,
+):
+    import imodmodel
+    import mrcfile
+    import numpy as np
+    from scipy.spatial.transform import Rotation as R
+
+    from findingampa.utils.imod import read_transforms_from_tomo_to_tilt
+    from findingampa.utils.transforms import aunp_coordinates_to_tiltseries
+    
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    
+    aunp_coordinates = imodmodel.read("aunps/combined_savedpicks.mod")
+    aunp_coordinates = aunp_coordinates[['x', 'y', 'z']].to_numpy()
+    tilt_angle, rotation_angle, translations = read_transforms_from_tomo_to_tilt(f"{tomo_name}.tlt", f"{tomo_name}.xf")
+   
+    with mrcfile.open(f"{tomo_name}_full_rec_BP.mrc") as mrc:
+        tomo_dim = mrc.header["nx"], mrc.header["ny"], mrc.header["nz"]
+    with mrcfile.open(f"{tomo_name}_ali.mrc") as mrc:
+        ali_dim = mrc.header["nx"], mrc.header["ny"]
+    with mrcfile.open(f"{tomo_name}.mrc") as mrc:
+        ori_dim = mrc.header["nx"], mrc.header["ny"]
+    
+    ali_coordinates, tilt_series_coordinates = aunp_coordinates_to_tiltseries(aunp_coordinates, tilt_angle, rotation_angle, translations, tomo_dim, ali_dim, ori_dim, x_offset=x_offset, y_offset=x_offset, z_offset=z_offset)
+    #with open("test_coordinates_rotated_rotated.txt", "w") as f:
+    #    for i, aunps in enumerate(test_coordinates_rotated_rotated):
+    #        for j, coordinates in enumerate(aunps):
+    #            f.write(f"1 {i+1} {coordinates[0]} {coordinates[1]} {j}\n")
+    
+
+    tilt_coordinates = imodmodel.read("aunps_tiltseries.mod")
+    ali_ref = imodmodel.read("aunps_ali.mod")
+    print(ali_coordinates.reshape(-1,3)[:,[0,1]] - ali_ref[['x', 'y']].to_numpy())
+    print(tilt_series_coordinates.reshape(-1,3)[:,[0,1]] - tilt_coordinates[['x', 'y']].to_numpy())
+
+@app.command()
+def test_aunp_cc(radius:float=8.0,plot:bool=True):
+    import mrcfile
+    import torch
+    import matplotlib.pyplot as plt
+    import imodmodel
+    import numpy as np
+    from findingampa.utils.projection import aunp_to_image2d
+
+    from findingampa.utils.imod import read_transforms_from_tomo_to_tilt
+    from findingampa.utils.transforms import aunp_coordinates_to_tiltseries, update_translations_from_shifts
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    
+    aunp_coordinates = imodmodel.read("aunps/combined_savedpicks.mod")
+    aunp_coordinates_orig = aunp_coordinates[['x', 'y', 'z']].to_numpy()
+    tilt_angle, rotation_angle, translations = read_transforms_from_tomo_to_tilt(f"{tomo_name}.tlt", f"{tomo_name}.xf")
+   
+    with mrcfile.open(f"{tomo_name}_full_rec_BP.mrc") as mrc:
+        tomo_dim = mrc.header["nx"], mrc.header["ny"], mrc.header["nz"]
+    with mrcfile.open(f"{tomo_name}_ali.mrc") as mrc:
+        ali_dim = mrc.header["nx"], mrc.header["ny"]
+    with mrcfile.open(f"{tomo_name}.mrc") as mrc:
+        ori_dim = mrc.header["nx"], mrc.header["ny"]
+    
+    ali_coordinates, tilt_series_coordinates = aunp_coordinates_to_tiltseries(aunp_coordinates_orig, tilt_angle, rotation_angle, translations, tomo_dim, ali_dim, ori_dim)
+    with mrcfile.open(f"{tomo_name}.mrc") as mrc:
+        tilt_series = torch.as_tensor(mrc.data.copy(),device=device)
+
+    aunp_coordinates = torch.as_tensor(tilt_series_coordinates,device=device)
+    #tilt_series = torch.as_tensor(tilt_series,device=device)
+
+    if plot:
+        # Arrange len(matrices) subplots in a
+        fig, axs = plt.subplots(2, len(tilt_series), figsize=(20, 4)) 
+    shifts = []
+    for i in range(tilt_series.shape[0]):
+        model_image, C = aunp_to_image2d(tilt_series_coordinates[:,i,[0,1]], tilt_series.shape[1:], radius, device)
+        model_image *= -1.0
+        image_product = torch.fft.fft2(tilt_series[i]) * torch.fft.fft2(model_image).conj()
+        cc_image = torch.fft.fftshift(torch.fft.ifft2(image_product))
+        
+        sub_orig = cc_image.real[cc_image.real.shape[0]//2-100:cc_image.real.shape[0]//2+100,cc_image.real.shape[1]//2-100:cc_image.real.shape[1]//2+100]
+        
+
+        import lmfit
+        from lmfit.lineshapes import gaussian2d, lorentzian
+        model = lmfit.models.Gaussian2dModel()
+        z = sub_orig.cpu().detach().numpy().flatten()
+        z = z - np.mean(z)
+        z = z/np.std(z)
+        # create x and y array for z values
+        x = np.arange(sub_orig.shape[0])
+        y = np.arange(sub_orig.shape[1])
+        x, y = np.meshgrid(x, y)
+        x = x.flatten()
+        y = y.flatten()
+        params = model.guess(z, x, y)
+        params['centerx'].set(value=100)
+        params['centery'].set(value=100)
+        params['sigmax'].set(value=3,max=40)
+        params['sigmay'].set(value=3,max=40)
+        result = model.fit(z, x=x, y=y, params=params)
+        #lmfit.report_fit(result)
+        
+        peak_pos = (sub_orig==torch.max(sub_orig)).nonzero()
+        shift = (peak_pos-torch.tensor([100,100],device=device))[0]
+        print(shift)
+        #shifts.append(shift.cpu().detach().numpy())
+        shift_parab = (result.best_values["centerx"]-100.5,result.best_values["centery"]-100.5)
+        shifts.append(shift_parab)
+        if plot:
+            axs[0, i].imshow(sub_orig.cpu().detach())
+            # disable axes
+            axs[0, i].axis('off')
+            axs[1, i].axis('off')
+            fig.tight_layout()
+            plt.show()
+    print("Updated translations")
+    translations = update_translations_from_shifts(rotation_angle, translations, np.array(shifts)[:,:])
+    ali_coordinates, tilt_series_coordinates = aunp_coordinates_to_tiltseries(aunp_coordinates_orig, tilt_angle, rotation_angle, translations, tomo_dim, ali_dim, ori_dim)
+
+    aunp_coordinates = torch.as_tensor(tilt_series_coordinates,device=device)
+    #tilt_series = torch.as_tensor(tilt_series,device=device)
+
+   
+    for i in range(tilt_series.shape[0]):
+        model_image, C = aunp_to_image2d(tilt_series_coordinates[:,i,[0,1]], tilt_series.shape[1:], radius, device)
+        model_image *= -1.0
+        image_product = torch.fft.fft2(tilt_series[i]) * torch.fft.fft2(model_image).conj()
+        cc_image = torch.fft.fftshift(torch.fft.ifft2(image_product))
+        
+        sub_orig = cc_image.real[cc_image.real.shape[0]//2-100:cc_image.real.shape[0]//2+100,cc_image.real.shape[1]//2-100:cc_image.real.shape[1]//2+100]
+        
+
+        import lmfit
+        from lmfit.lineshapes import gaussian2d, lorentzian
+        model = lmfit.models.Gaussian2dModel()
+        z = sub_orig.cpu().detach().numpy().flatten()
+        z = z - np.mean(z)
+        z = z/np.std(z)
+        # create x and y array for z values
+        x = np.arange(sub_orig.shape[0])
+        y = np.arange(sub_orig.shape[1])
+        x, y = np.meshgrid(x, y)
+        x = x.flatten()
+        y = y.flatten()
+        params = model.guess(z, x, y)
+        params['centerx'].set(value=100)
+        params['centery'].set(value=100)
+        params['sigmax'].set(value=3,max=40)
+        params['sigmay'].set(value=3,max=40)
+        result = model.fit(z, x=x, y=y, params=params)
+        #lmfit.report_fit(result)
+        
+        peak_pos = (sub_orig==torch.max(sub_orig)).nonzero()
+        shift = (peak_pos-torch.tensor([100,100],device=device))[0]
+        print(shift)
+        shift_parab = (result.best_values["centerx"]-100.5,result.best_values["centery"]-100.5)
+        print(shift_parab)
+
+        with open("optimized.xf","w") as f:
+            for i in range(len(rotation_angle)):
+                f.write(f"{np.cos(np.deg2rad(rotation_angle[i]))} {-np.sin(np.deg2rad(rotation_angle[i]))} {np.sin(np.deg2rad(rotation_angle[i]))} {np.cos(np.deg2rad(rotation_angle[i]))} {translations[i,0]} {translations[i,1]}\n")
+
+
+@app.command()
+def test_aunp_cc_tarotation(radius:float=8.0,plot:bool=True):
+    import mrcfile
+    import torch
+    import matplotlib.pyplot as plt
+    import imodmodel
+    import numpy as np
+    from findingampa.utils.projection import aunp_to_image2d
+
+    from findingampa.utils.imod import read_transforms_from_tomo_to_tilt
+    from findingampa.utils.transforms import aunp_coordinates_to_tiltseries, update_translations_from_shifts
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    
+    aunp_coordinates = imodmodel.read("aunps/combined_savedpicks.mod")
+    aunp_coordinates_orig = aunp_coordinates[['x', 'y', 'z']].to_numpy()
+    tilt_angle, rotation_angle, translations = read_transforms_from_tomo_to_tilt(f"{tomo_name}.tlt", f"{tomo_name}.xf")
+   
+    with mrcfile.open(f"{tomo_name}_full_rec_BP.mrc") as mrc:
+        tomo_dim = mrc.header["nx"], mrc.header["ny"], mrc.header["nz"]
+    with mrcfile.open(f"{tomo_name}_ali.mrc") as mrc:
+        ali_dim = mrc.header["nx"], mrc.header["ny"]
+    with mrcfile.open(f"{tomo_name}.mrc") as mrc:
+        ori_dim = mrc.header["nx"], mrc.header["ny"]
+    
+    
+    with mrcfile.open(f"{tomo_name}.mrc") as mrc:
+        tilt_series = torch.as_tensor(mrc.data.copy(),device=device)
+
+    
+    #tilt_series = torch.as_tensor(tilt_series,device=device)
+
+    if plot:
+        # Arrange len(matrices) subplots in a
+        fig, axs = plt.subplots(11, len(tilt_series), figsize=(20, 4)) 
+    
+    shifts = []
+    for j, ta_o in enumerate(np.arange(-0.5,0.51,0.1)):
+        for i in range(tilt_series.shape[0]):
+            ali_coordinates, tilt_series_coordinates = aunp_coordinates_to_tiltseries(aunp_coordinates_orig, tilt_angle, rotation_angle+ta_o, translations, tomo_dim, ali_dim, ori_dim)
+            aunp_coordinates = torch.as_tensor(tilt_series_coordinates,device=device)
+            model_image, C = aunp_to_image2d(tilt_series_coordinates[:,i,[0,1]], tilt_series.shape[1:], radius, device)
+            model_image *= -1.0
+            image_product = torch.fft.fft2(tilt_series[i]) * torch.fft.fft2(model_image).conj()
+            cc_image = torch.fft.fftshift(torch.fft.ifft2(image_product))
+            
+            sub_orig = cc_image.real[cc_image.real.shape[0]//2-100:cc_image.real.shape[0]//2+100,cc_image.real.shape[1]//2-100:cc_image.real.shape[1]//2+100]
+            
+
+            import lmfit
+            from lmfit.lineshapes import gaussian2d, lorentzian
+            model = lmfit.models.Gaussian2dModel()
+            z = sub_orig.cpu().detach().numpy().flatten()
+            z = z - np.mean(z)
+            z = z/np.std(z)
+            # create x and y array for z values
+            x = np.arange(sub_orig.shape[0])
+            y = np.arange(sub_orig.shape[1])
+            x, y = np.meshgrid(x, y)
+            x = x.flatten()
+            y = y.flatten()
+            params = model.guess(z, x, y)
+            params['centerx'].set(value=100)
+            params['centery'].set(value=100)
+            params['sigmax'].set(value=3,max=40)
+            params['sigmay'].set(value=3,max=40)
+            result = model.fit(z, x=x, y=y, params=params)
+            lmfit.report_fit(result)
+            
+            peak_pos = (sub_orig==torch.max(sub_orig)).nonzero()
+            shift = (peak_pos-torch.tensor([100,100],device=device))[0]
+            #print(shift)
+            #shifts.append(shift.cpu().detach().numpy())
+            shift_parab = (result.best_values["centerx"]-100.5,result.best_values["centery"]-100.5)
+            shifts.append(shift_parab)
+            if plot:
+                axs[j, i].imshow(sub_orig.cpu().detach())
+                axs[j,i].set_title(f"{result.best_values['amplitude']:.2f} ")
+                # disable axes
+                axs[j, i].axis('off')
+    fig.tight_layout()
+    plt.show()
+    

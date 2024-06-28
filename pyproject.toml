@@ -69,6 +69,7 @@ Changelog = "https://github.com/jojoelfe/findingampa/releases"
 
 [project.scripts]
 finding_ampa = "findingampa.cli_findingampa:app"
+test_finding_ampa = "findingampa.cli_test_findingampa:app"
 
 [tool.hatch]
 version.source = "vcs"

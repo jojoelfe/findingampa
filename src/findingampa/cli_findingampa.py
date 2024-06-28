@@ -397,7 +397,8 @@ def create_bin_3dctf_tomogram(
     FakeSirtIterations: int = typer.Option(8),
     num_gpus: int = typer.Option(1),
     never_erase: bool = False,
-    delete_aunps: bool = False
+    delete_aunps: bool = False,
+    custom_xf: Optional[Path] = None
 ):
     from findingampa.utils.imod import check_ccderaser
     from subprocess import Popen, PIPE
@@ -448,7 +449,7 @@ def create_bin_3dctf_tomogram(
         
     # Run 3dctfsetup
     
-    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -ra {tomo_name}{'_aunperase' if delete_aunps else ''}.mrc -un -parallel -te /tmp/3dctf -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
+    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -ra {tomo_name}{'_aunperase' if delete_aunps else ''}.mrc {'-x '+str(custom_xf) if custom_xf else ''} -un -parallel -te /tmp/3dctf -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
     out, error = pro1.communicate()
     print(out)
     print(error)
@@ -460,7 +461,7 @@ def create_bin_3dctf_tomogram(
     pro2.wait()
 
     # run clip rotx
-    pro3 = Popen(f"clip rotx {tomo_name}_3dctf_rec.mrc {tomo_name}_full_rec_{'SIRT' if FakeSirtIterations > 0 else 'BP'}_3DCTF_BIN{bin_factor}{'_AUNPERASED' if delete_aunps else ''}.mrc", shell=True)
+    pro3 = Popen(f"clip rotx {tomo_name}_3dctf_rec.mrc {tomo_name}_full_rec_{'SIRT' if FakeSirtIterations > 0 else 'BP'}_3DCTF_BIN{bin_factor}{'_AUNPERASED' if delete_aunps else ''}{'CX' if custom_xf else ''}.mrc", shell=True)
     pro3.wait()
 
     
