@@ -201,6 +201,8 @@ def annotate_ampa_positions():
     
     ampa_folder = Path("ampa_positions")
     ampa_folder.mkdir(parents=True, exist_ok=True)
+    annotated_membranes_folder = Path("annotated_membranes")
+    annotated_membranes_folder.mkdir(parents=True, exist_ok=True)
     instance_template_file = ampa_folder / "ampa_position_template.blend"
     #Copy template file into aunp_folder
     import shutil
@@ -425,7 +427,7 @@ def create_bin_3dctf_tomogram(
             lines[i] = f"THICKNESS 3000\n"
     newlines = []
     for i, line in enumerate(lines):
-        if "FakeSirtIterations" not in line:
+        if "FakeSirtIterations" not in line.lower():
             newlines.append(line)
     lines = newlines
     if FakeSirtIterations > 0:

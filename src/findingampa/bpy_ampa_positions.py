@@ -16,6 +16,52 @@ bpy.types.Scene.FA_position_name = bpy.props.StringProperty(
     default='default',
     maxlen=0
 )
+bpy.types.Scene.FA_membrane_name = bpy.props.StringProperty(
+    name='Name',
+    description='Name of the membrane.',
+    default='default',
+    maxlen=0
+)
+
+def save_membrane(name):
+    selected_objects = bpy.context.selected_objects
+    if len(selected_objects) == 0:
+        return {'CANCELLED'}
+    all = []
+    for so in selected_objects:           
+        vertices = so.data.vertices
+        coords = [v.co for v in vertices]
+        all.append(np.array(coords))
+    combined_array = np.concatenate(all)  
+    np.savetxt(f"annotated_membranes/{name}.txt", combined_array*10.0)
+
+class SavePRE(Operator):
+    bl_idname = "scene.save_pre"
+    bl_label = "Save presynaptic membrane"
+
+    def execute(self, context):
+
+        save_membrane("presynaptic")
+        
+        return {'FINISHED'}
+
+class SavePOST(Operator):
+    bl_idname = "scene.save_post"
+    bl_label = "Save postynaptic membrane"
+
+    def execute(self, context):
+        save_membrane("postsynaptic")
+        
+        return {'FINISHED'}
+
+class SaveMEM(Operator):
+    bl_idname = "scene.save_mem"
+    bl_label = "Save generic membrane"
+
+    def execute(self, context):
+        save_membrane({context.scene.FA_membrane_name})
+        
+        return {'FINISHED'}
 class SaveAMPA(Operator):
     """Print object name in Console"""
     bl_idname = "scene.save_ampa"
@@ -152,23 +198,6 @@ class SaveAMPA(Operator):
 
         return {'FINISHED'}
     
-class WritePicks(Operator):
-    """Print object name in Console"""
-    bl_idname = "scene.write_picks"
-    bl_label = "Write Saved Picks"
-
-    def execute(self, context):
-        from subprocess import Popen, PIPE
-        # Iterate over objects in SavedPicks collection
-        saved_picks_collection = bpy.data.collections['SavedPicks']
-        for obj in saved_picks_collection.objects:
-            # Get vertex coordinates as numpy array
-            vertices = obj.data.vertices
-            coords = [v.co for v in vertices]
-            coords = np.array(coords)
-            np.savetxt(f"aunps/{obj.name}.txt", coords*10.0)
-            
-        return {'FINISHED'}
 
 # ------------------------------------------------------------------------
 #    Panel in Object Mode
@@ -195,6 +224,11 @@ class OBJECT_PT_CustomPanel(Panel):
         row_import = col.row()
         row_import.prop(context.scene, 'FA_position_name')
         col.operator(SaveAMPA.bl_idname, text="Save AMPA position", icon="CONSOLE")
+        col.operator(SavePRE.bl_idname, text="Save presynaptic membrane", icon="CONSOLE")
+        col.operator(SavePOST.bl_idname, text="Save postsynaptic membrane", icon="CONSOLE")
+        row_genmem = col.row()
+        row_genmem.prop(context.scene, 'FA_membrane_name')
+        col.operator(SaveMEM.bl_idname, text="Save generic Membrane", icon="CONSOLE")
 
         layout.separator()
 
@@ -205,10 +239,17 @@ class OBJECT_PT_CustomPanel(Panel):
 def register():
     bpy.utils.register_class(OBJECT_PT_CustomPanel)
     bpy.utils.register_class(SaveAMPA)
+    bpy.utils.register_class(SavePRE)
+    bpy.utils.register_class(SavePOST)
+    bpy.utils.register_class(SaveMEM)
+
 
 def unregister():
     bpy.utils.unregister_class(OBJECT_PT_CustomPanel)
     bpy.utils.unregister_class(SaveAMPA)
+    bpy.utils.unregister_class(SavePRE)
+    bpy.utils.unregister_class(SavePOST)
+    bpy.utils.unregister_class(SaveMEM)
 
 register()
 
