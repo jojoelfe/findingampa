@@ -59,7 +59,7 @@ class SaveMEM(Operator):
     bl_label = "Save generic membrane"
 
     def execute(self, context):
-        save_membrane({context.scene.FA_membrane_name})
+        save_membrane(context.scene.FA_membrane_name)
         
         return {'FINISHED'}
 class SaveAMPA(Operator):
