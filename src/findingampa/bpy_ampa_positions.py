@@ -23,6 +23,34 @@ bpy.types.Scene.FA_membrane_name = bpy.props.StringProperty(
     maxlen=0
 )
 
+def ShowMessageBox(message = "", title = "Message Box", icon = 'INFO'):
+
+        def draw(self, context):
+            self.layout.label(text=message)
+
+        bpy.context.window_manager.popup_menu(draw, title = title, icon = icon)
+
+class ShowDistance(Operator):
+
+    bl_idname = "scene.show_dis"
+    bl_label = "Show Distance"
+
+    def execute(self, context):
+
+    
+
+        mode = bpy.context.active_object.mode
+        # we need to switch from Edit mode to Object mode so the selection gets updated
+        bpy.ops.object.mode_set(mode='OBJECT')
+        selectedVerts = [v for v in bpy.context.active_object.data.vertices if v.select]
+        if len(selectedVerts) != 2:
+            ShowMessageBox("Please select only 2 vertices")
+        else:
+            ShowMessageBox(f"The distance is {np.linalg.norm(selectedVerts[0].co-selectedVerts[1].co)*100} A")
+        # back to whatever mode we were in
+        bpy.ops.object.mode_set(mode='EDIT')
+        return {'FINISHED'}
+
 def save_membrane(name):
     selected_objects = bpy.context.selected_objects
     if len(selected_objects) == 0:
@@ -229,6 +257,7 @@ class OBJECT_PT_CustomPanel(Panel):
         row_genmem = col.row()
         row_genmem.prop(context.scene, 'FA_membrane_name')
         col.operator(SaveMEM.bl_idname, text="Save generic Membrane", icon="CONSOLE")
+        col.operator(ShowDistance.bl_idname, text="Show distance", icon="CONSOLE")
 
         layout.separator()
 
@@ -242,6 +271,7 @@ def register():
     bpy.utils.register_class(SavePRE)
     bpy.utils.register_class(SavePOST)
     bpy.utils.register_class(SaveMEM)
+    bpy.utils.register_class(ShowDistance)
 
 
 def unregister():
@@ -250,6 +280,7 @@ def unregister():
     bpy.utils.unregister_class(SavePRE)
     bpy.utils.unregister_class(SavePOST)
     bpy.utils.unregister_class(SaveMEM)
+    bpy.utils.unregister_class(ShowDistance)
 
 register()
 
