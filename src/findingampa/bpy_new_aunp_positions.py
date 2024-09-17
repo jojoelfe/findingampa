@@ -5,24 +5,14 @@ from bpy.types import (Panel, Operator)
 
 import sys
 sys.path.append('/groups/elferich/Documents/MolecularNodes/')
+sys.path.append('/goliath/processing/Gouaux/CJS/GitHub/MolecularNodes')
 sys.path.append(sys.argv[sys.argv.index("--findingampa") + 1])
 
 
 # ------------------------------------------------------------------------
 #    Operators
 # ------------------------------------------------------------------------
-bpy.types.Scene.FA_position_name = bpy.props.StringProperty(
-    name='Name',
-    description='Name of the positions.',
-    default='default',
-    maxlen=0
-)
-bpy.types.Scene.FA_membrane_name = bpy.props.StringProperty(
-    name='Name',
-    description='Name of the membrane.',
-    default='default',
-    maxlen=0
-)
+
 
 def ShowMessageBox(message = "", title = "Message Box", icon = 'INFO'):
 
@@ -52,49 +42,13 @@ class ShowDistance(Operator):
         bpy.ops.object.mode_set(mode='EDIT')
         return {'FINISHED'}
 
-def save_membrane(name):
-    selected_objects = bpy.context.selected_objects
-    if len(selected_objects) == 0:
-        return {'CANCELLED'}
-    all = []
-    for so in selected_objects:           
-        vertices = so.data.vertices
-        coords = [v.co for v in vertices]
-        all.append(np.array(coords))
-    combined_array = np.concatenate(all)  
-    np.savetxt(f"annotated_membranes/{name}.txt", combined_array*10.0)
 
-class SavePRE(Operator):
-    bl_idname = "scene.save_pre"
-    bl_label = "Save presynaptic membrane"
 
-    def execute(self, context):
 
-        save_membrane("presynaptic")
-        
-        return {'FINISHED'}
-
-class SavePOST(Operator):
-    bl_idname = "scene.save_post"
-    bl_label = "Save postynaptic membrane"
-
-    def execute(self, context):
-        save_membrane("postsynaptic")
-        
-        return {'FINISHED'}
-
-class SaveMEM(Operator):
-    bl_idname = "scene.save_mem"
-    bl_label = "Save generic membrane"
-
-    def execute(self, context):
-        save_membrane(context.scene.FA_membrane_name)
-        
-        return {'FINISHED'}
-class SaveAMPA(Operator):
+class Save(Operator):
     """Print object name in Console"""
-    bl_idname = "scene.save_ampa"
-    bl_label = "Save AMPA positions"
+    bl_idname = "scene.save"
+    bl_label = "Save annotations"
 
     def execute(self, context):
         import molecularnodes as mn
@@ -250,14 +204,9 @@ class OBJECT_PT_CustomPanel(Panel):
        
 
         col = layout.column(align=True)
-        row_import = col.row()
-        row_import.prop(context.scene, 'FA_position_name')
-        col.operator(SaveAMPA.bl_idname, text="Save AMPA position", icon="CONSOLE")
-        col.operator(SavePRE.bl_idname, text="Save presynaptic membrane", icon="CONSOLE")
-        col.operator(SavePOST.bl_idname, text="Save postsynaptic membrane", icon="CONSOLE")
-        row_genmem = col.row()
-        row_genmem.prop(context.scene, 'FA_membrane_name')
-        col.operator(SaveMEM.bl_idname, text="Save generic Membrane", icon="CONSOLE")
+       
+        col.operator(Save.bl_idname, text="Save Annotation", icon="CONSOLE")
+        
         col.operator(ShowDistance.bl_idname, text="Show distance", icon="CONSOLE")
 
         layout.separator()
@@ -268,19 +217,15 @@ class OBJECT_PT_CustomPanel(Panel):
 
 def register():
     bpy.utils.register_class(OBJECT_PT_CustomPanel)
-    bpy.utils.register_class(SaveAMPA)
-    bpy.utils.register_class(SavePRE)
-    bpy.utils.register_class(SavePOST)
-    bpy.utils.register_class(SaveMEM)
+    bpy.utils.register_class(Save)
+
     bpy.utils.register_class(ShowDistance)
 
 
 def unregister():
     bpy.utils.unregister_class(OBJECT_PT_CustomPanel)
-    bpy.utils.unregister_class(SaveAMPA)
-    bpy.utils.unregister_class(SavePRE)
-    bpy.utils.unregister_class(SavePOST)
-    bpy.utils.unregister_class(SaveMEM)
+    bpy.utils.unregister_class(Save)
+
     bpy.utils.unregister_class(ShowDistance)
 
 register()
@@ -315,11 +260,16 @@ if  should_setup:
         membranes_object.modifiers[0]["Socket_2"] = membrain.object
         bpy.context.evaluated_depsgraph_get().update()
         membranes_object.update_tag()
-    mn.entities.density.ui.load(path, invert=False,name="Tomo",setup_nodes=False)
+    tomo_density = mn.entities.density.ui.load(path, invert=False,name="Tomo",setup_nodes=False)
+    tomo_display_object = bpy.data.objects['Tomo_Display']
+    tomo_display_object.modifiers[0]["Socket_4"] = tomo_density.object
     try:
-        mn.entities.ensemble.ui.load_starfile(f"{path.name[:-4]}.star",name="AuNP_Template_matching",node_setup=False)
+        picks_star = mn.entities.ensemble.ui.load_starfile(f"aunps/aunp_tm.star",name="AuNP_Template_matching",node_setup=False)
     except KeyError:
         pass
+    display_object = bpy.data.objects['Display']
+    display_object.modifiers[0]["Socket_3"] = tomo_density.object
+    display_object.modifiers[0]["Socket_2"] = picks_star.object
     for window in bpy.context.window_manager.windows:
         for area in window.screen.areas: # iterate through areas in current screen
             if area.type == 'VIEW_3D':

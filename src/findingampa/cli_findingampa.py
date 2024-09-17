@@ -142,42 +142,39 @@ def cryocare():
         raise typer.Exit()
 
 @app.command()
-def new_annotate_aunps():
+def new_annotate_aunps(
+    reset: bool = False
+):
+    from findingampa.utils.assets import FA_ASSETS
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
     except IndexError:
         typer.echo("No rawtlt file found")
         raise typer.Exit()
-    potential_blender_paths= [
-        Path("/groups/elferich/sw/blender-4.3.0-alpha+main.afff3918db9e-linux.x86_64-release/blender"),
-
-    ]
-    BLENDER_PATH = None
-    for path in potential_blender_paths:
-        if path.exists():
-            BLENDER_PATH = path
-            break
-    if BLENDER_PATH is None:
+    
+    BLENDER_PATH = FA_ASSETS / "blender" / "4_3" / "blender"
+    
+    if not BLENDER_PATH.exists():
         typer.echo("Blender not found")
         raise typer.Exit()
     template_file = Path(__file__).parent / "new_aunp_template.blend"
     
-    ampa_folder = Path("new_aunp_positions")
-    ampa_folder.mkdir(parents=True, exist_ok=True)
+    aunp_folder = Path("aunps")
+    aunp_folder.mkdir(parents=True, exist_ok=True)
     annotated_membranes_folder = Path("annotated_membranes")
     annotated_membranes_folder.mkdir(parents=True, exist_ok=True)
-    instance_template_file = ampa_folder / "new_aunp_template.blend"
+    instance_template_file = aunp_folder / "new_aunp_template.blend"
     #Copy template file into aunp_folder
     import shutil
-    if instance_template_file.exists():
+    if instance_template_file.exists() and not reset:
         should_setup = False
     else:
-        shutil.copy(template_file, ampa_folder)
+        shutil.copy(template_file, aunp_folder)
         should_setup = True
 
     import os
     print(should_setup)
-    os.system(f"{BLENDER_PATH} {ampa_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_new_aunp_positions.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc {'--setup' if should_setup else ''} --findingampa {Path(__file__).parent.parent}")   
+    os.system(f"{BLENDER_PATH} {aunp_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_new_aunp_positions.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc {'--setup' if should_setup else ''} --findingampa {Path(__file__).parent.parent}")   
 
 
 
