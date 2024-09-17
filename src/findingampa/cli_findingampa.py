@@ -307,79 +307,6 @@ def annotate_aunps():
         pro2 = Popen(f"imodtrans  -ry {tilt_angle} -tz 187.5 {coordinate_file.with_suffix('.mod')} {str(coordinate_file)[:-4] + '_orig.mod'}", stdout=PIPE, stderr=PIPE, shell=True)
         pro2.communicate()
 
-@app.command()
-def plot_voxel_histogram(
-    tomogram_type: str = "_full_rec_BP_flat.mrc",
-    output_file: Optional[str] = None
-):
-    import mrcfile
-    import matplotlib.pyplot as plt
-    import numpy as np
-    try:
-        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
-    except IndexError:
-        typer.echo("No rawtlt file found")
-        raise typer.Exit()
-
-    with mrcfile.open(tomo_name+tomogram_type) as mrc:
-        data = mrc.data.copy()
-    # Only use center of the data
-    z, y, x = data.shape
-    data -= np.mean(data.flatten())
-    data /= -np.std(data.flatten())
-    #data = data[z//2-z//3:z//2+z//3,y//2-y//3:y//2+y//3,x//2-x//3:x//2+x//3]
-    
-    hist = plt.hist(data.flatten(), bins=500, density=True)
-    # Overtlay an gaussian fit
-    from scipy.stats import norm
-    mean, std = norm.fit(data.flatten())
-    xmin, xmax = plt.xlim()
-    x = np.linspace(xmin, xmax, 100)
-    p = norm.pdf(x, mean, std)
-    plt.plot(x, p, 'k', linewidth=2)
-    plt.ylabel("Density")
-    plt.xlabel("Voxel Value (Z-Score)")
-    if output_file is not None:
-        plt.savefig(output_file)
-    else:
-        plt.show()
-
-@app.command()
-def plot_isosurface_histogram(
-    threshold: float = typer.Argument(7.0),
-    tomogram_type: str = "_full_rec_BP_flat.mrc",
-    output_file: Optional[str] = None
-):
-    
-
-
-    try:
-        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
-    except IndexError:
-        typer.echo("No rawtlt file found")
-        raise typer.Exit()
-    potential_blender_paths= [
-        Path("/home/elferich/Downloads/blender-4.2.0-alpha+main.bace4c9a293c-linux.x86_64-release/blender"),
-        Path("/groups/elferich/Downloads/blender-4.2.0-alpha+main.6c78f7974098-linux.x86_64-release/blender"),
-        Path("/goliath/sw/blender/blender-4.2.0-alpha+main.2f67c45b650b-linux.x86_64-release/blender")
-    ]
-    BLENDER_PATH = None
-    for path in potential_blender_paths:
-        if path.exists():
-            BLENDER_PATH = path
-            break
-    if BLENDER_PATH is None:
-        typer.echo("Blender not found")
-        raise typer.Exit()
-    template_file = Path(__file__).parent / "histogram_template_utility.blend"
-    aunp_folder = Path("histograms")
-    aunp_folder.mkdir(parents=True, exist_ok=True)
-    #Copy template file into aunp_folder
-    import shutil
-    shutil.copy(template_file, aunp_folder)
-
-    import os
-    os.system(f"{BLENDER_PATH} {aunp_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_isosurface_histogram.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc --threshold {threshold}")   
 
 @app.command()
 def add_to_relion_star(
@@ -595,6 +522,46 @@ def dynamo_table_to_relion4_star(
 
     print(combined[combined['tomo'] == 1][['x','y','z','tdrot','tilt','narot']])
 
+@app.command()
+def match_aunps():
+    import torch
+    import mrcfile
+    from findingampa.utils.tm3d import calc_3dtm, fit_gaussian_3d_list
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    
+    locations_tomo, locations_score_volume, score_volume = calc_3dtm(Path(tomo_name+"_full_rec_BP_flat.mrc"))
+    score_volume = torch.tensor(score_volume).cuda()
+    fitted_params_list = fit_gaussian_3d_list(torch.tensor(score_volume), locations_score_volume.cuda(),6)
+    offsets = torch.tensor([[f['x0'], f['y0'], f['z0']] for f in fitted_params_list])
+    with mrcfile.open(tomo_name+"_full_rec_BP_flat.mrc", permissive=True) as f:
+        tomo_tensor = torch.tensor(f.data)
 
+    tomo_fitted_params_list = fit_gaussian_3d_list(tomo_tensor.cuda(), locations_tomo.int().cuda(), 6, sign=-1)
+    data = pd.DataFrame({'faTM_PeakX':locations_tomo[:,2].cpu().numpy(),
+                        'faTM_PeakY':locations_tomo[:,1].cpu().numpy(),
+                        'faTM_PeakZ':locations_tomo[:,0].cpu().numpy(),
+                        'faTM_PeakScore':[score_volume[x,y,z].item() for x,y,z in locations_score_volume],
+                        'faTM_gaussianFitX':offsets[:,0].cpu().numpy(),
+                        'faTM_gaussianFitY':offsets[:,1].cpu().numpy(),
+                        'faTM_gaussianFitZ':offsets[:,2].cpu().numpy(),
+                        'faTM_gaussianFitSigmaX':[f['sigma_x'] for f in fitted_params_list],
+                        'faTM_gaussianFitSigmaY':[f['sigma_y'] for f in fitted_params_list],
+                        'faTM_gaussianFitSigmaZ':[f['sigma_z'] for f in fitted_params_list],
+                        'faTM_gaussianFitAmplitude':[f['amplitude'] for f in fitted_params_list],
+                        'faTomo_gaussianFitX':[f['z0'] for f in tomo_fitted_params_list],
+                        'faTomo_gaussianFitY':[f['y0'] for f in tomo_fitted_params_list],
+                        'faTomo_gaussianFitZ':[f['x0'] for f in tomo_fitted_params_list],
+                        'faTomo_gaussianFitSigmaX':[f['sigma_z'] for f in tomo_fitted_params_list],
+                        'faTomo_gaussianFitSigmaY':[f['sigma_y'] for f in tomo_fitted_params_list],
+                        'faTomo_gaussianFitSigmaZ':[f['sigma_x'] for f in tomo_fitted_params_list],
+                        'faTomo_gaussianFitAmplitude':[f['amplitude'] for f in tomo_fitted_params_list]})
+    aunppositions = Path.cwd() / "aunps" 
+    aunppositions.mkdir(exist_ok=True)
+    starfile.write(data,aunppositions / "aunp_tm.star")
+    print(f"Wrote potential picks to {aunppositions / 'aunp_tm.star'}")
 
 
