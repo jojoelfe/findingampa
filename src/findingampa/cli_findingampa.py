@@ -133,6 +133,46 @@ def create_tomograms():
     )
 
 @app.command()
+def new_annotate_aunps():
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    potential_blender_paths= [
+        Path("/groups/elferich/sw/blender-4.3.0-alpha+main.afff3918db9e-linux.x86_64-release/blender"),
+
+    ]
+    BLENDER_PATH = None
+    for path in potential_blender_paths:
+        if path.exists():
+            BLENDER_PATH = path
+            break
+    if BLENDER_PATH is None:
+        typer.echo("Blender not found")
+        raise typer.Exit()
+    template_file = Path(__file__).parent / "new_aunp_template.blend"
+    
+    ampa_folder = Path("new_aunp_positions")
+    ampa_folder.mkdir(parents=True, exist_ok=True)
+    annotated_membranes_folder = Path("annotated_membranes")
+    annotated_membranes_folder.mkdir(parents=True, exist_ok=True)
+    instance_template_file = ampa_folder / "new_aunp_template.blend"
+    #Copy template file into aunp_folder
+    import shutil
+    if instance_template_file.exists():
+        should_setup = False
+    else:
+        shutil.copy(template_file, ampa_folder)
+        should_setup = True
+
+    import os
+    print(should_setup)
+    os.system(f"{BLENDER_PATH} {ampa_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_new_aunp_positions.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc {'--setup' if should_setup else ''} --findingampa {Path(__file__).parent.parent}")   
+
+
+
+@app.command()
 def annotate_membranes():
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
@@ -400,9 +440,11 @@ def create_bin_3dctf_tomogram(
     num_gpus: int = typer.Option(1),
     never_erase: bool = False,
     delete_aunps: bool = False,
-    custom_xf: Optional[Path] = None
+    custom_xf: Optional[Path] = None,
+    custom_suffix: str = "",
+    flatten: bool = False
 ):
-    from findingampa.utils.imod import check_ccderaser
+    from findingampa.utils.imod import check_ccderaser, get_align_angle_offset
     from subprocess import Popen, PIPE
     import shutil
     try:
@@ -414,7 +456,7 @@ def create_bin_3dctf_tomogram(
     remove_beads = check_ccderaser(tomo_name)
     if never_erase:
         remove_beads = False
-
+    print(f"Remove beads: {remove_beads}")
     #Change THICKNESS in tilt.com
     tilt_com = Path.cwd() / "tilt.com"
     with open(tilt_com, "r") as f:
@@ -423,11 +465,15 @@ def create_bin_3dctf_tomogram(
     with open(tilt_com.with_suffix(".bakfa"), "w") as f:
         f.writelines(lines)
     for i, line in enumerate(lines):
+        if flatten and "OFFSET" in line:
+            lines[i] = f"OFFSET {get_align_angle_offset()}\n"
+            print(get_align_angle_offset())
         if "THICKNESS" in line:
-            lines[i] = f"THICKNESS 3000\n"
+            lines[i] = f"THICKNESS 1500\n" if flatten else f"THICKNESS 3000\n"
+        
     newlines = []
     for i, line in enumerate(lines):
-        if "FakeSirtIterations" not in line.lower():
+        if "fakesirtiterations" not in line.lower():
             newlines.append(line)
     lines = newlines
     if FakeSirtIterations > 0:
@@ -456,11 +502,10 @@ def create_bin_3dctf_tomogram(
         
     # Run 3dctfsetup
     
-    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -ra {tomo_name}{'_aunperase' if delete_aunps else ''}.mrc {'-x '+str(custom_xf) if custom_xf else ''} -un -parallel -te /tmp/3dctf -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
+    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -ra {tomo_name}{'_aunperase' if delete_aunps else ''}{custom_suffix}.mrc {'-x '+str(custom_xf) if custom_xf else ''} -un -parallel -te /tmp/3dctf -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
     out, error = pro1.communicate()
     print(out)
     print(error)
-
     # Run 3dctf
     gpustrings = [f":{str(i+1)}" for i in range(num_gpus)]
     print(f"processchunks -G localhost{''.join(gpustrings)} ctf3d")
@@ -468,7 +513,7 @@ def create_bin_3dctf_tomogram(
     pro2.wait()
 
     # run clip rotx
-    pro3 = Popen(f"clip rotx {tomo_name}_3dctf_rec.mrc {tomo_name}_full_rec_{'SIRT' if FakeSirtIterations > 0 else 'BP'}_3DCTF_BIN{bin_factor}{'_AUNPERASED' if delete_aunps else ''}{'CX' if custom_xf else ''}.mrc", shell=True)
+    pro3 = Popen(f"clip rotx {tomo_name}_3dctf_rec.mrc {tomo_name}_full_rec_{'SIRT' if FakeSirtIterations > 0 else 'BP'}_3DCTF_BIN{bin_factor}{'_AUNPERASED' if delete_aunps else ''}{'CX' if custom_xf else ''}{custom_suffix}.mrc", shell=True)
     pro3.wait()
 
     

@@ -10,9 +10,9 @@ def get_exclude_list():
 
 def get_align_angle_offset():
     # Open up align.com file and find the line starting with AlignAngle
-    with open('align.com', 'r') as f:
+    with open('tomopitch.log', 'r') as f:
         for line in f:
-            if line.startswith('AngleOffset'):
+            if line.startswith(' Angle offset'):
                 align_angle = line.split()[-1:][0]
     
     return float(align_angle)
