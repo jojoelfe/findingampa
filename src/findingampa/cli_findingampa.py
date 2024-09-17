@@ -91,15 +91,15 @@ def create_tomograms():
         raise typer.Exit()
     angle_offset = get_tomopitch_angle_offset()
     full_image = get_full_image()
-    print(f"Creating WBP untilted tomogram {tomo_name}_full_rec_BP.mrc")
-    run_tilt(
-        f"{tomo_name}_ali.mrc",
-        f"{tomo_name}_full_rec_BP.mrc",
-        f"{tomo_name}.tlt",
-        exclude_list=exclude_list,
-        thickness=3000,
-        full_image=full_image
-    )
+    #print(f"Creating WBP untilted tomogram {tomo_name}_full_rec_BP.mrc")
+    #run_tilt(
+    #    f"{tomo_name}_ali.mrc",
+    #    f"{tomo_name}_full_rec_BP.mrc",
+    #    f"{tomo_name}.tlt",
+    #    exclude_list=exclude_list,
+    #    thickness=3000,
+    #    full_image=full_image
+    #)
     print(f"Creating WBP tilted tomogram {tomo_name}_full_rec_BP_flat.mrc")
     run_tilt(
         f"{tomo_name}_ali.mrc",
@@ -110,27 +110,36 @@ def create_tomograms():
         thickness=1500,
         full_image=full_image
     )
-    print(f"Creating SIRT untilted tomogram {tomo_name}_full_rec_SIRT.mrc")
-    run_tilt(
-        f"{tomo_name}_ali.mrc",
-        f"{tomo_name}_full_rec_SIRT.mrc",
-        f"{tomo_name}.tlt",
-        SIRT_iterations=11,
-        exclude_list=exclude_list,
-        thickness=3000,
-        full_image=full_image
-    )
-    print(f"Creating SIRT tilted tomogram {tomo_name}_full_rec_SIRT_flat.mrc")
-    run_tilt(
-        f"{tomo_name}_ali.mrc",
-        f"{tomo_name}_full_rec_SIRT_flat.mrc",
-        f"{tomo_name}.tlt",
-        SIRT_iterations=11,
-        exclude_list=exclude_list,
-        angle_offset=angle_offset,
-        thickness=1500,
-        full_image=full_image
-    )
+    #print(f"Creating SIRT untilted tomogram {tomo_name}_full_rec_SIRT.mrc")
+    #run_tilt(
+    #    f"{tomo_name}_ali.mrc",
+    #    f"{tomo_name}_full_rec_SIRT.mrc",
+    #    f"{tomo_name}.tlt",
+    #    SIRT_iterations=11,
+    #    exclude_list=exclude_list,
+    #    thickness=3000,
+    #    full_image=full_image
+    #)
+    #print(f"Creating SIRT tilted tomogram {tomo_name}_full_rec_SIRT_flat.mrc")
+    #run_tilt(
+    #    f"{tomo_name}_ali.mrc",
+    #    f"{tomo_name}_full_rec_SIRT_flat.mrc",
+    #    f"{tomo_name}.tlt",
+    #    SIRT_iterations=11,
+    #    exclude_list=exclude_list,
+    #    angle_offset=angle_offset,
+    #    thickness=1500,
+    #    full_image=full_image
+    #)
+@app.command()
+def cryocare():
+    import json
+
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
 
 @app.command()
 def new_annotate_aunps():
