@@ -453,7 +453,7 @@ def create_bin_3dctf_tomogram(
     custom_suffix: str = "",
     flatten: bool = False
 ):
-    from findingampa.utils.imod import check_ccderaser, get_align_angle_offset
+    from findingampa.utils.imod import check_ccderaser, get_tomopitch_angle_offset
     from subprocess import Popen, PIPE
     import shutil
     try:
@@ -475,7 +475,7 @@ def create_bin_3dctf_tomogram(
         f.writelines(lines)
     for i, line in enumerate(lines):
         if flatten and "OFFSET" in line:
-            lines[i] = f"OFFSET {get_align_angle_offset()}\n"
+            lines[i] = f"OFFSET {get_tomopitch_angle_offset()}\n"
             print(get_align_angle_offset())
         if "THICKNESS" in line:
             lines[i] = f"THICKNESS 1500\n" if flatten else f"THICKNESS 3000\n"
