@@ -42,8 +42,84 @@ class ShowDistance(Operator):
         bpy.ops.object.mode_set(mode='EDIT')
         return {'FINISHED'}
 
+def save_membrane(name):
+    collection = bpy.data.collections.get(name)
+    if collection:
+        selected_objects = collection.objects
+    else:
+        return {'CANCELLED'}
+    if len(selected_objects) == 0:
+        return {'CANCELLED'}
+
+    for i, so in enumerate(selected_objects):           
+        vertices = so.data.vertices
+        coords = [v.co for v in vertices]
+        filename = f"aunps/{name.lower().replace(' ','')}_{i+1}.txt"
+        np.savetxt(filename, np.array(coords)*10.0)
+    return {'FINISHED'}
+
+def save_aunps():
+    import bpy
+    import numpy as np
+    from dataclasses import dataclass
+    import pandas as pd
+    import starfile
+
+    display_object = bpy.data.objects["real_data"]
+
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+
+    mine = display_object.evaluated_get(depsgraph)
+
+    @dataclass
+    class AttributeTypeInfo:
+        dname: str
+        dtype: type
+        width: int
+
+    TYPES = {
+        key: AttributeTypeInfo(*values)
+        for key, values in {
+            "FLOAT_VECTOR": ("vector", float, [3]),
+            "FLOAT_COLOR": ("color", float, [4]),
+            "QUATERNION": ("value", float, [4]),
+            "INT": ("value", int, [1]),
+            "FLOAT": ("value", float, [1]),
+            "INT32_2D": ("value", int, [2]),
+            "FLOAT4X4": ("value", float, [4, 4]),
+            "BOOLEAN": ("value", bool, [1]),
+        }.items()
+    }
 
 
+    data = {}
+
+    for attrs in mine.data.attributes:
+        if attrs.name.startswith("."):
+            continue
+        if attrs.name == "color":
+            continue
+
+        print(attrs.name)
+        data_type = TYPES[attrs.data_type]
+        dim = data_type.width
+        n_values = n_att = len(attrs.data)
+        for dimension in dim:
+            n_values *= dimension
+        array = np.zeros(n_values,dtype=data_type.dtype)
+
+        attrs.data.foreach_get(data_type.dname,array)
+        if dim == [1]:
+            data[attrs.name] = array
+        else:
+            # return an array with one row per item, even if a 1D attribute. Does this make sense?
+            data[attrs.name+"X"] = array.reshape((n_att, *dim))[:,0] * 10.0
+            data[attrs.name+"Y"] = array.reshape((n_att, *dim))[:,1] * 10.0
+            data[attrs.name+"Z"] = array.reshape((n_att, *dim))[:,2] * 10.0
+
+    df = pd.DataFrame(data)
+    print(df)
+    starfile.write(df,"aunps/aunps_picked.star")
 
 class Save(Operator):
     """Print object name in Console"""
@@ -51,134 +127,10 @@ class Save(Operator):
     bl_label = "Save annotations"
 
     def execute(self, context):
-        import molecularnodes as mn
-        try:
-            import starfile
-        except ModuleNotFoundError:
-            mn.pkg.install_package('starfile')
-            import starfile
-        import bpy
-        import numpy as np
-        import pandas as pd
-        try:
-            from scipy.spatial.transform import Rotation as R
-        except ModuleNotFoundError:
-            mn.pkg.install_package("scipy")
-            from scipy.spatial.transform import Rotation as R
-        from findingampa.utils.imod import get_tomopitch_angle_offset
-        from subprocess import Popen, PIPE
-        try:
-            import imodmodel
-        except ModuleNotFoundError:
-            mn.pkg.install_package("imodmodel")
-            import imodmodel
-
-        ampa_positions_object = bpy.data.objects['receptor_positions']
-        depsgraph = bpy.context.evaluated_depsgraph_get()
-        ampa_positions_object_eval = ampa_positions_object.evaluated_get(depsgraph)
-
-        num_ampa = len(ampa_positions_object_eval.data.vertices)
-        coordinates = np.ones(num_ampa*3)
-        rotations = np.ones(num_ampa*4)
-
-        ampa_positions_object_eval.data.vertices.foreach_get("co",coordinates)
-        coordinates = coordinates.reshape(-1,3)
-
-        ampa_positions_object_eval.data.attributes["rotation"].data.foreach_get("value",rotations)
-        rotations = rotations.reshape(-1,4)
-
-        #Convert from blender to scipy conventions and then into Scipy rotation
-        rotations_obj = R.from_quat(rotations[:, [1, 2, 3, 0]])
-
-        #Invert to go from blender to relion
-        rotations = rotations_obj.inv()
-
-        #Convert to euler
-        rotations = rotations.as_euler(seq='ZYZ',degrees=True)
-
-        #Convert coordinates to A
-        coordinates_A = coordinates * 100
-
-        # Write relion star file
-        results_relion = []
-        for i in range(num_ampa):
-            results_relion.append({
-                            "rlnCoordinateX": coordinates_A[i][0] / 2.5,
-                            "rlnCoordinateY": coordinates_A[i][1] / 2.5,
-                            "rlnCoordinateZ": coordinates_A[i][2] / 2.5,
-                            "rlnOriginXAngst": 0,
-                            "rlnOriginYAngst": 0,
-                            "rlnOriginZAngst": 0,
-                            "rlnAngleRot": rotations[i][0],
-                            "rlnAngleTilt": rotations[i][1],
-                            "rlnAnglePsi": rotations[i][2],
-                            "rlnImagePixelSize": 2.5,
-                            "rlnMicrographName": path,
-                            "rlnOpticsGroup": 1,
-                        })
-
-        starfile.write({
-                    'particles': pd.DataFrame(results_relion), 
-                    'optics': pd.DataFrame([
-                        {'rlnOpticsGroup':1}
-                        ])
-                }, f"ampa_positions/{context.scene.FA_position_name}_flat.star")
-
-        # Write 3 point .txt file
-        with open(f"ampa_positions/{context.scene.FA_position_name}_flat.txt", "w") as f:
-            for i in range(num_ampa):
-                f.write(f"{i+1} {coordinates_A[i][0] / 10} {coordinates_A[i][1] / 10} {coordinates_A[i][2] / 10}\n")
-                aunp_center_point = rotations_obj[i].apply([0,0,200])
-                f.write(f"{i+1} {coordinates_A[i][0] / 10 + aunp_center_point[0] / 10} {coordinates_A[i][1] / 10 + aunp_center_point[1] / 10} {coordinates_A[i][2] / 10 + aunp_center_point[2] / 10}\n")
-                aunp_point = rotations_obj[i].apply([60,0,200])
-                f.write(f"{i+1} {coordinates_A[i][0] / 10 + aunp_point[0] / 10} {coordinates_A[i][1] / 10 + aunp_point[1] / 10} {coordinates_A[i][2] / 10 + aunp_point[2] / 10}\n")
-        pro1 = Popen(f"point2model -im {path} ampa_positions/{context.scene.FA_position_name}_flat.txt ampa_positions/{context.scene.FA_position_name}_flat.mod", stdout=PIPE, stderr=PIPE, shell=True)
-        pro1.communicate()
-        # Transform the 3 point model to untilted coordinates
-        tilt_angle = get_tomopitch_angle_offset()
-        pro2 = Popen(f"imodtrans  -ry {tilt_angle} -tz 187.5 ampa_positions/{context.scene.FA_position_name}_flat.mod ampa_positions/{context.scene.FA_position_name}.mod", stdout=PIPE, stderr=PIPE, shell=True)
-        pro2.communicate()
-        
-        # Read transformed coordinats back in and use to recalc angles... A bit roundabout way, but will be consistent with IMOD
-        trans_model = imodmodel.read(f"ampa_positions/{context.scene.FA_position_name}.mod")
-        # Iterate over contours (column c in trans_model dataframe)
-        contour_grouped = trans_model.groupby('contour_id')
-
-       
-        trans_relion_results = []
-        for contour, points in contour_grouped:
-            # Get the first point of the contour
-            point = points.iloc[0][['x','y','z']].to_numpy()
-            # Get the coordinates
-            trans_coordinates = point * 4
-
-            trans_center_point = points.iloc[1][['x','y','z']].to_numpy() - point
-            trans_aunp_point = points.iloc[2][['x','y','z']].to_numpy() - point
-            rot, angle = R.align_vectors([[0, 0, 20],[60,0,200]], [trans_center_point,trans_aunp_point])
-            euler = rot.as_euler("ZYZ", degrees=True)
-            trans_relion_results.append({
-                            "rlnCoordinateX": trans_coordinates[0],
-                            "rlnCoordinateY": trans_coordinates[1],
-                            "rlnCoordinateZ": trans_coordinates[2],
-                            "rlnOriginXAngst": 0,
-                            "rlnOriginYAngst": 0,
-                            "rlnOriginZAngst": 0,
-                            "rlnAngleRot": euler[0],
-                            "rlnAngleTilt": euler[1],
-                            "rlnAnglePsi": euler[2],
-                            "rlnImagePixelSize": 2.5,
-                            "rlnMicrographName": path,
-                            "rlnOpticsGroup": 1,
-                        })
-        starfile.write({
-                    'particles': pd.DataFrame(trans_relion_results), 
-                    'optics': pd.DataFrame([
-                        {'rlnOpticsGroup':1}
-                        ])
-                }, f"ampa_positions/{context.scene.FA_position_name}.star")
-
-        
-
+        save_membrane("Presynatptic Membranes")
+        save_membrane("Postsynaptic Membranes")
+        save_membrane("Synaptic Vesicles")
+        save_aunps()
         return {'FINISHED'}
     
 
@@ -289,3 +241,9 @@ if  should_setup:
     # Add ann_dens to Membrane object
     # Apply mem modifier
     # Split membranes
+
+    bpy.context.evaluated_depsgraph_get().update()
+    tomo_display_object.modifiers[0].show_viewport = False
+    #tomo_display_object.modifiers[0].show_viewport = True
+    display_object.modifiers[0].show_viewport = False
+    display_object.modifiers[0].show_viewport = True
