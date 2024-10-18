@@ -90,5 +90,3 @@ UseGPU 0
     from subprocess import Popen, PIPE
     process = Popen("tilt -StandardInput",stdin=PIPE,stdout=PIPE,shell=True)
     process.communicate(input=input_string.encode())
-    process2 = Popen(f"alterheader -d {final_pixelsize},{final_pixelsize},{final_pixelsize} {output}",stdin=PIPE,stdout=PIPE,shell=True)
-    process2.communicate()

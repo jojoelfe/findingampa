@@ -78,6 +78,7 @@ def new_project(
 def create_tomograms():
     from findingampa.utils.reconstruct import run_tilt
     from findingampa.utils.imod import get_exclude_list, get_align_angle_offset, get_tomopitch_angle_offset, get_full_image
+    from findingampa.utils.cryocare import apply_cryocare
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
     except IndexError:
@@ -110,6 +111,35 @@ def create_tomograms():
         thickness=1500,
         full_image=full_image
     )
+    create_bin_3dctf_tomogram(bin_factor=4, 
+                              FakeSirtIterations=0, 
+                              num_gpus=1, 
+                              never_erase=False, 
+                              delete_aunps=False, 
+                              custom_xf=None, 
+                              flatten=True, 
+                              tilt_parent=False)
+    print(f"Creating EVN tilted tomogram")
+    create_bin_3dctf_tomogram(bin_factor=4, 
+                              FakeSirtIterations=0, 
+                              num_gpus=1, 
+                              never_erase=False, 
+                              delete_aunps=False, 
+                              custom_xf=None, 
+                              custom_suffix="_EVN", 
+                              flatten=True, 
+                              tilt_parent=True)
+    print(f"Creating ODD tilted tomogram")
+    create_bin_3dctf_tomogram(bin_factor=4, 
+                              FakeSirtIterations=0, 
+                              num_gpus=1, 
+                              never_erase=False, 
+                              delete_aunps=False, 
+                              custom_xf=None, 
+                              custom_suffix="_ODD", 
+                              flatten=True, 
+                              tilt_parent=True)
+    denoised = apply_cryocare(tomo_name)
     #print(f"Creating SIRT untilted tomogram {tomo_name}_full_rec_SIRT.mrc")
     #run_tilt(
     #    f"{tomo_name}_ali.mrc",
@@ -189,7 +219,8 @@ def annotate_membranes():
     MEMBRAIN_MODEL_PATH = None
     potential_membrain_model_paths = [
         Path("/goliath/processing/Gouaux/CJS/software/membrain-seg/models/MemBrain_seg_v10_alpha.ckpt"),
-        Path("/home/elferich/ProcessingJE/manuscript01/relion_reconstruction/finding_ampa/static/MemBrain_seg_v10_alpha.ckpt")
+        Path("/home/elferich/ProcessingJE/manuscript01/relion_reconstruction/finding_ampa/static/MemBrain_seg_v10_alpha.ckpt"),
+        Path("/scratch/pompeii/elferich/gouaux_tomo/ProcessingJE/manuscript01/relion_reconstruction/finding_ampa/static/MemBrain_seg_v10_alpha.ckpt"),
     ]
     for path in potential_membrain_model_paths:
         if path.exists():
@@ -202,7 +233,7 @@ def annotate_membranes():
     membrain_output_path.mkdir(parents=True, exist_ok=True)
     
     segmentation_file = segment(
-        tomogram_path=f"{tomo_name}_full_rec_BP_flat.mrc",
+        tomogram_path=f"{tomo_name}_full_rec_BP_3DCTF_BIN4_denoised.mrc",
         ckpt_path=MEMBRAIN_MODEL_PATH,
         out_folder=membrain_output_path,
         segmentation_threshold=0.0,
@@ -375,10 +406,12 @@ def create_bin_3dctf_tomogram(
     delete_aunps: bool = False,
     custom_xf: Optional[Path] = None,
     custom_suffix: str = "",
-    flatten: bool = False
+    flatten: bool = False,
+    tilt_parent: bool = False
 ):
     from findingampa.utils.imod import check_ccderaser, get_tomopitch_angle_offset
     from subprocess import Popen, PIPE
+    import mrcfile
     import shutil
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
@@ -390,6 +423,15 @@ def create_bin_3dctf_tomogram(
     if never_erase:
         remove_beads = False
     print(f"Remove beads: {remove_beads}")
+    # Make dose file local in mtffilter.com
+    mtffilter_com = Path.cwd() / "mtffilter.com"
+    with open(mtffilter_com, "r") as f:
+        lines = f.readlines()
+    for i, line in enumerate(lines):
+        if "DoseWeightingFile" in line:
+            lines[i] = f"DoseWeightingFile {tomo_name}.dose\n"
+    with open(mtffilter_com, "w") as f:
+        f.writelines(lines)
     #Change THICKNESS in tilt.com
     tilt_com = Path.cwd() / "tilt.com"
     with open(tilt_com, "r") as f:
@@ -400,7 +442,7 @@ def create_bin_3dctf_tomogram(
     for i, line in enumerate(lines):
         if flatten and "OFFSET" in line:
             lines[i] = f"OFFSET {get_tomopitch_angle_offset()}\n"
-            print(get_align_angle_offset())
+            #print(get_align_angle_offset())
         if "THICKNESS" in line:
             lines[i] = f"THICKNESS 1500\n" if flatten else f"THICKNESS 3000\n"
         
@@ -434,8 +476,18 @@ def create_bin_3dctf_tomogram(
         pro.wait()
         
     # Run 3dctfsetup
+    tmp_path = "/scratch/pompeii/elferich/3dctftemp"
+    Path(tmp_path).mkdir(exist_ok=True)
+    image_stack = Path(f"{'../' if tilt_parent else ''}{tomo_name}{'_aunperase' if delete_aunps else ''}{custom_suffix}.mrc")
+    #with mrcfile.open(image_stack,mode="r+") as f:
+    #    f.voxel_size = 1.0
+    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -ra {image_stack} {'-x '+str(custom_xf) if custom_xf else ''} -un -parallel -te {tmp_path} -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
+    out, error = pro1.communicate()
+    print(out)
+    print(error)
     
-    pro1 = Popen(f"ctf3dsetup -th 30 -f -red {bin_factor} {'-e' if remove_beads else ''} -ra {tomo_name}{'_aunperase' if delete_aunps else ''}{custom_suffix}.mrc {'-x '+str(custom_xf) if custom_xf else ''} -un -parallel -te /tmp/3dctf -rec tilt.com", stdout=PIPE, stderr=PIPE, shell=True)
+    
+    pro1 = Popen(f"xfmodel -back -scale 0.125 -xform {tomo_name}.xf {tomo_name}_erase.fid {tomo_name}_erase_raw.fid", stdout=PIPE, stderr=PIPE, shell=True)
     out, error = pro1.communicate()
     print(out)
     print(error)
@@ -561,4 +613,110 @@ def match_aunps():
     starfile.write(data,aunppositions / "aunp_tm.star")
     print(f"Wrote potential picks to {aunppositions / 'aunp_tm.star'}")
 
+@app.command()
+def check_pixelsizes():
+    import mrcfile
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    
+    to_test = [
+        {"name": f"{tomo_name}.mrc", "expected": 2.5},
+        {"name": f"{tomo_name}_ali.mrc", "expected": 10.0},
+        {"name": f"{tomo_name}_full_rec_BP_flat.mrc", "expected": 10.0},
+    ]
 
+    passed = True
+
+    for test in to_test:
+        with mrcfile.open(test["name"], permissive=True) as f:
+            if f.voxel_size.x != test["expected"]:
+                print(f"Pixel size of {test['name']} is {f.voxel_size.x}, expected {test['expected']}")
+                passed = False
+    
+    return passed
+
+@app.command()
+def correct_pixelsizes(
+    force: bool = False
+):
+    import mrcfile
+    from subprocess import Popen, PIPE
+    from findingampa.utils.imod import check_ccderaser
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    
+    if check_pixelsizes() and not force:
+        print("Pixel sizes already correct")
+        return
+    
+    to_correct = [
+        {"name": f"{tomo_name}.mrc", "expected": (2.5,2.5,1)},
+        {"name": f"../{tomo_name}_EVN.mrc", "expected": (2.5,2.5,1)},
+        {"name": f"../{tomo_name}_ODD.mrc", "expected": (2.5,2.5,1)},
+        {"name": f"../{tomo_name}.mrc", "expected": (2.5,2.5,1)},
+        {"name": f"{tomo_name}_EVN.mrc", "expected": (2.5,2.5,1)},
+        {"name": f"{tomo_name}_ODD.mrc", "expected": (2.5,2.5,1)},
+    ]
+    
+
+    #if check_ccderaser(tomo_name):
+    #    Popen(f"submfg newst.com",shell=True).wait()
+    for cor in to_correct:
+        try:
+            with mrcfile.open(cor["name"], mode="r+") as f:
+                f.voxel_size = cor["expected"]
+                
+        except FileNotFoundError:
+            print(f"File {cor['name']} not found")
+
+    need_erasing = check_ccderaser(tomo_name)
+    # Regenerate ali file
+    Popen(f"submfg newst.com",shell=True).wait()
+
+    if need_erasing:
+        try:
+            if not Path(f"{tomo_name}_erase_original.fid").exists():
+                Path(f"{tomo_name}_erase.fid").rename(f"{tomo_name}_erase_original.fid")
+        except FileNotFoundError:
+            print("Error: erase fid not found")
+        out, err = Popen(f"imodinfo {tomo_name}_erase_original.fid", shell=True, stdout=PIPE).communicate()
+        for line in out.decode().split("\n"):
+            if "#      SCALE" in line:
+                scale = float(line.split()[-2][0])
+        with mrcfile.open(f"{tomo_name}_ali.mrc", mode="r+") as f:
+            xs,ys,zs = f.header["nx"], f.header["ny"], f.header["nz"]
+        # Ok, need to (A) revert the scaling (B) scale the coordinates if collected from different binning (C) make sure it get the right image dimensions
+        Popen(f"imodtrans -I {tomo_name}_ali.mrc -sx {scale/4.0} -sy {scale/4.0} -n {xs},{ys},{zs} {tomo_name}_erase_original.fid {tomo_name}_erase.fid",shell=True).wait()
+        Popen(f"submfg golderaser.com",shell=True).wait()
+        try:
+            Path(f"{tomo_name}_erase_ali.mrc").rename(f"{tomo_name}_ali.mrc")
+        except FileNotFoundError:
+            print("Error: Gold erasing failed")
+    mtffilter_com = Path.cwd() / "mtffilter.com"
+    with open(mtffilter_com, "r") as f:
+        lines = f.readlines()
+    for i, line in enumerate(lines):
+        if "DoseWeightingFile" in line:
+            lines[i] = f"DoseWeightingFile {tomo_name}.dose\n"
+    with open(mtffilter_com, "w") as f:
+        f.writelines(lines)
+    Popen(f"submfg mtffilter.com",shell=True).wait()
+    try:
+        Path(f"{tomo_name}_filt_ali.mrc").rename(f"{tomo_name}_ali.mrc")
+    except FileNotFoundError:
+        print("Error: Dose filtering failed")
+    
+        # Need to run 
+    
+
+
+    if check_pixelsizes():
+        print("Pixel sizes corrected")
+    else:
+        print("ERROR!: Pixel sizes not corrected")
