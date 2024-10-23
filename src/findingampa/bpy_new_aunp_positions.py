@@ -212,6 +212,45 @@ if  should_setup:
         membranes_object.modifiers[0]["Socket_2"] = membrain.object
         bpy.context.evaluated_depsgraph_get().update()
         membranes_object.update_tag()
+
+        bpy.context.view_layer.objects.active = membranes_object
+        bpy.ops.object.modifier_apply(modifier="GeometryNodes")
+        bpy.ops.object.mode_set(mode='EDIT')
+
+        bpy.ops.mesh.separate(type='LOOSE')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        #DESELECT ALL
+        bpy.ops.object.select_all(action='DESELECT')
+        # Add ann_dens to Membrane object
+        # Apply mem modifier
+        # Split membranes
+
+        bpy.context.evaluated_depsgraph_get().update()
+
+    membrain = Path("membrain") / f"{path.name[:-8]}3DCTF_BIN4_denoised_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
+    if membrain.exists():
+        membrain = mn.entities.density.ui.load(membrain.absolute(), invert=False,name="MemBrain")
+        bpy.data.node_groups["MN_density_MemBrain.001"].nodes["Style Density Surface"].inputs[1].default_value = 125
+        #bpy.ops.object.modifier_remove(modifier="MolecularNodes")
+        membrain.object.hide_set(True)
+        membranes_object = bpy.data.objects['Membranes_denoised']
+        membranes_object.modifiers[0]["Socket_2"] = membrain.object
+        bpy.context.evaluated_depsgraph_get().update()
+        membranes_object.update_tag()
+        bpy.context.view_layer.objects.active = membranes_object
+        bpy.ops.object.modifier_apply(modifier="GeometryNodes")
+        bpy.ops.object.mode_set(mode='EDIT')
+
+        bpy.ops.mesh.separate(type='LOOSE')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        #DESELECT ALL
+        bpy.ops.object.select_all(action='DESELECT')
+        # Add ann_dens to Membrane object
+        # Apply mem modifier
+        # Split membranes
+
+        bpy.context.evaluated_depsgraph_get().update()
+
     tomo_density = mn.entities.density.ui.load(path, invert=False,name="Tomo",setup_nodes=False)
     tomo_display_object = bpy.data.objects['Tomo_Display']
     tomo_display_object.modifiers[0]["Socket_4"] = tomo_density.object
@@ -229,18 +268,7 @@ if  should_setup:
                     if space.type == 'VIEW_3D': # check if space is a 3D view
                         space.shading.type = 'MATERIAL'
 
-    membranes_object = bpy.data.objects['Membranes']                    
-    bpy.context.view_layer.objects.active = membranes_object
-    bpy.ops.object.modifier_apply(modifier="GeometryNodes")
-    bpy.ops.object.mode_set(mode='EDIT')
-
-    bpy.ops.mesh.separate(type='LOOSE')
-    bpy.ops.object.mode_set(mode='OBJECT')
-    #DESELECT ALL
-    bpy.ops.object.select_all(action='DESELECT')
-    # Add ann_dens to Membrane object
-    # Apply mem modifier
-    # Split membranes
+   
 
     bpy.context.evaluated_depsgraph_get().update()
     tomo_display_object.modifiers[0].show_viewport = False

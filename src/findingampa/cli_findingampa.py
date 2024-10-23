@@ -119,6 +119,14 @@ def create_tomograms():
                               custom_xf=None, 
                               flatten=True, 
                               tilt_parent=False)
+    tilt_parent = False
+    if Path(f"../{tomo_name}_EVN.mrc").exists():
+        tilt_parent = True
+    elif Path(f"{tomo_name}_EVN.mrc").exists():
+        tilt_parent = False
+    else:
+        print(f"No even/odd stacks found")
+        return
     print(f"Creating EVN tilted tomogram")
     create_bin_3dctf_tomogram(bin_factor=4, 
                               FakeSirtIterations=0, 
@@ -128,7 +136,7 @@ def create_tomograms():
                               custom_xf=None, 
                               custom_suffix="_EVN", 
                               flatten=True, 
-                              tilt_parent=True)
+                              tilt_parent=tilt_parent)
     print(f"Creating ODD tilted tomogram")
     create_bin_3dctf_tomogram(bin_factor=4, 
                               FakeSirtIterations=0, 
@@ -138,38 +146,10 @@ def create_tomograms():
                               custom_xf=None, 
                               custom_suffix="_ODD", 
                               flatten=True, 
-                              tilt_parent=True)
+                              tilt_parent=tilt_parent)
     denoised = apply_cryocare(tomo_name)
-    #print(f"Creating SIRT untilted tomogram {tomo_name}_full_rec_SIRT.mrc")
-    #run_tilt(
-    #    f"{tomo_name}_ali.mrc",
-    #    f"{tomo_name}_full_rec_SIRT.mrc",
-    #    f"{tomo_name}.tlt",
-    #    SIRT_iterations=11,
-    #    exclude_list=exclude_list,
-    #    thickness=3000,
-    #    full_image=full_image
-    #)
-    #print(f"Creating SIRT tilted tomogram {tomo_name}_full_rec_SIRT_flat.mrc")
-    #run_tilt(
-    #    f"{tomo_name}_ali.mrc",
-    #    f"{tomo_name}_full_rec_SIRT_flat.mrc",
-    #    f"{tomo_name}.tlt",
-    #    SIRT_iterations=11,
-    #    exclude_list=exclude_list,
-    #    angle_offset=angle_offset,
-    #    thickness=1500,
-    #    full_image=full_image
-    #)
-@app.command()
-def cryocare():
-    import json
+    
 
-    try:
-        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
-    except IndexError:
-        typer.echo("No rawtlt file found")
-        raise typer.Exit()
 
 @app.command()
 def new_annotate_aunps(
@@ -210,22 +190,14 @@ def new_annotate_aunps(
 
 @app.command()
 def annotate_membranes():
+    from findingampa.utils.assets import FA_ASSETS
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
     except IndexError:
         typer.echo("No rawtlt file found")
         raise typer.Exit()
     
-    MEMBRAIN_MODEL_PATH = None
-    potential_membrain_model_paths = [
-        Path("/goliath/processing/Gouaux/CJS/software/membrain-seg/models/MemBrain_seg_v10_alpha.ckpt"),
-        Path("/home/elferich/ProcessingJE/manuscript01/relion_reconstruction/finding_ampa/static/MemBrain_seg_v10_alpha.ckpt"),
-        Path("/scratch/pompeii/elferich/gouaux_tomo/ProcessingJE/manuscript01/relion_reconstruction/finding_ampa/static/MemBrain_seg_v10_alpha.ckpt"),
-    ]
-    for path in potential_membrain_model_paths:
-        if path.exists():
-            MEMBRAIN_MODEL_PATH = path
-            break
+    MEMBRAIN_MODEL_PATH = FA_ASSETS / "membrain" / "MemBrain_seg_v10_alpha.ckpt"
 
     from membrain_seg.segmentation.segment import segment
 
@@ -233,25 +205,39 @@ def annotate_membranes():
     membrain_output_path.mkdir(parents=True, exist_ok=True)
     
     segmentation_file = segment(
-        tomogram_path=f"{tomo_name}_full_rec_BP_3DCTF_BIN4_denoised.mrc",
+        tomogram_path=f"{tomo_name}_full_rec_BP_flat.mrc",
         ckpt_path=MEMBRAIN_MODEL_PATH,
         out_folder=membrain_output_path,
         segmentation_threshold=0.0,
         store_probabilities=True
     )
     print(f"Segmentation saved to {segmentation_file}")
+    smooth_membranes(segmentation_file)
+    denoised = Path(f"{tomo_name}_full_rec_BP_3DCTF_BIN4_denoised.mrc")
+    if denoised.exists():
+        segmentation_file = segment(
+            tomogram_path=str(denoised),
+            ckpt_path=MEMBRAIN_MODEL_PATH,
+            out_folder=membrain_output_path,
+            segmentation_threshold=0.0,
+            store_probabilities=True
+        )
+        print(f"Segmentation saved to {segmentation_file}")
+        smooth_membranes(segmentation_file)
 
 @app.command()
-def smooth_membranes():
-    try:
-        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
-    except IndexError:
-        typer.echo("No rawtlt file found")
-        raise typer.Exit()
+def smooth_membranes(segmentation_file = None):
+    if segmentation_file is None:
+        try:
+            tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+        except IndexError:
+            typer.echo("No rawtlt file found")
+            raise typer.Exit()
+        segmentation_file = Path(f"membrain/{tomo_name}_full_rec_BP_flat_MemBrain_seg_v10_alpha.ckpt_segmented.mrc")
     from subprocess import Popen, PIPE
-    pro1 = Popen(f"trimvol -c 0,1 membrain/{tomo_name}_full_rec_BP_flat_MemBrain_seg_v10_alpha.ckpt_segmented.mrc membrain/scaled.mrc", stdout=PIPE, stderr=PIPE, shell=True)
+    pro1 = Popen(f"trimvol -c 0,1 {segmentation_file} membrain/scaled.mrc", stdout=PIPE, stderr=PIPE, shell=True)
     pro1.communicate()
-    pro2 = Popen(f"clip smooth -l 4.0 -m float membrain/scaled.mrc membrain/{tomo_name}_full_rec_BP_flat_MemBrain_seg_v10_alpha_ckpt_segmented_smooth.mrc", stdout=PIPE, stderr=PIPE, shell=True)
+    pro2 = Popen(f"clip smooth -l 4.0 -m float membrain/scaled.mrc {segmentation_file[:-4]}_smooth.mrc", stdout=PIPE, stderr=PIPE, shell=True)
     pro2.communicate()
 
 @app.command()
@@ -624,13 +610,20 @@ def check_pixelsizes():
     
     to_test = [
         {"name": f"{tomo_name}.mrc", "expected": 2.5},
+        {"name": f"../{tomo_name}.mrc", "expected": 2.5},
+        {"name": f"../{tomo_name}_EVN.mrc", "expected": 2.5},
+        {"name": f"../{tomo_name}_ODD.mrc", "expected": 2.5},
+        {"name": f"{tomo_name}_EVN.mrc", "expected": 2.5},
+        {"name": f"{tomo_name}_ODD.mrc", "expected": 2.5},
         {"name": f"{tomo_name}_ali.mrc", "expected": 10.0},
-        {"name": f"{tomo_name}_full_rec_BP_flat.mrc", "expected": 10.0},
     ]
 
     passed = True
 
     for test in to_test:
+        if not Path(test["name"]).exists():
+            print(f"File {test['name']} not found")
+            continue
         with mrcfile.open(test["name"], permissive=True) as f:
             if f.voxel_size.x != test["expected"]:
                 print(f"Pixel size of {test['name']} is {f.voxel_size.x}, expected {test['expected']}")
