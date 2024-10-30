@@ -50,7 +50,15 @@ def save_membrane(name):
         return {'CANCELLED'}
     if len(selected_objects) == 0:
         return {'CANCELLED'}
-
+    bpy.ops.object.select_all(action='DESELECT')
+    for so in selected_objects:
+        so.select_set(True)
+    filename = f"aunps/{name.lower().replace(' ','')}.glb"
+    bpy.ops.export_scene.gltf(
+        filepath=filename, 
+        use_selection=True  # Export only selected objects
+    )  
+    bpy.ops.object.select_all(action='DESELECT') 
     for i, so in enumerate(selected_objects):           
         vertices = so.data.vertices
         coords = [v.co for v in vertices]
