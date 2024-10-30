@@ -18,10 +18,8 @@ def apply_cryocare(tomo_name):
     }
     with open("cryocare_predict.json", "w") as f:
         json.dump(predit_config, f)
-    pro1 = Popen(f"/groups/elferich/.conda/envs/cryocare_11/bin/cryoCARE_predict.py --conf cryocare_predict.json", stdout=PIPE, stderr=PIPE, shell=True)
-    out, error = pro1.communicate()
-    print(out)
-    print(error)
+    pro1 = Popen(f"{FA_ASSETS}/cryocare/env/bin/cryoCARE_predict.py --conf cryocare_predict.json", shell=True).wait()
+
     output_file = Path("cryocare_denoised") / f"{tomo_name}_full_rec_BP_3DCTF_BIN4_EVN.mrc"
     # Move file to the correct location
     result_file = output_file.replace(f"{tomo_name}_full_rec_BP_3DCTF_BIN4_denoised.mrc")

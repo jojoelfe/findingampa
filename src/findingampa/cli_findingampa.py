@@ -462,7 +462,7 @@ def create_bin_3dctf_tomogram(
         pro.wait()
         
     # Run 3dctfsetup
-    tmp_path = "/scratch/pompeii/elferich/3dctftemp"
+    tmp_path = "/tmp/3dctftemp"
     Path(tmp_path).mkdir(exist_ok=True)
     image_stack = Path(f"{'../' if tilt_parent else ''}{tomo_name}{'_aunperase' if delete_aunps else ''}{custom_suffix}.mrc")
     #with mrcfile.open(image_stack,mode="r+") as f:
