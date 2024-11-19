@@ -149,6 +149,30 @@ def create_tomograms():
                               tilt_parent=tilt_parent)
     denoised = apply_cryocare(tomo_name)
     
+@app.command()
+def ddw():
+    import mrcfile
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    from subprocess import Popen, PIPE
+
+    with mrcfile.open(f"{tomo_name}_full_rec_BP_3DCTF_BIN4_EVN.mrc", mode="r+") as f:
+        dimensions = f.header["nx"], f.header["ny"], f.header["nz"]
+    
+    ratio = dimensions[0]/dimensions[1]
+    if abs(ratio - 1) > 0.1:
+        print("Tomogram is not square, assuming K3")
+        check_point_file = "ddw_k3.ckpt"
+    else:
+        print("Tomogram is square, assuming Falcon")
+        check_point_file = "20241101.ckpt"
+    
+    Popen(f"scp *BIN4_EVN.mrc *BIN4_ODD.mrc exahead1:/home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/", shell=True).wait()
+    Popen(f"ssh exahead1 srun -p gouaux --mem 32G --time 5:00:00 -c 10 --gres gpu:a40:1 /home/exacloud/gscratch/gouaux/CJS/deepdewedge/ddw_env/bin/ddw refine-tomogram --tomo0-files /home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/{tomo_name}_full_rec_BP_3DCTF_BIN4_EVN.mrc  --tomo1-files /home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/{tomo_name}_full_rec_BP_3DCTF_BIN4_ODD.mrc --subtomo-size 96 --mw-angle 84 --subtomo-overlap 32 --batch-size 5 --model-checkpoint-file /home/exacloud/gscratch/gouaux/CJS/deepdewedge/checkpoints/{check_point_file} --output-dir /home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/ --num-workers 10 --gpu 0", shell=True).wait()
+    Popen(f"scp exahead1:/home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/{tomo_name}*_refined.mrc {tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc", shell=True).wait()
 
 
 @app.command()
@@ -191,6 +215,7 @@ def new_annotate_aunps(
 @app.command()
 def annotate_membranes():
     from findingampa.utils.assets import FA_ASSETS
+    import mrcfile
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
     except IndexError:
@@ -213,6 +238,20 @@ def annotate_membranes():
     )
     print(f"Segmentation saved to {segmentation_file}")
     smooth_membranes(segmentation_file)
+    ddw = Path(f"{tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc")
+    if ddw.exists():
+        with mrcfile.open(ddw, mode="r+") as f:
+                f.voxel_size = 10.0
+        segmentation_file = segment(
+            tomogram_path=str(ddw),
+            ckpt_path=MEMBRAIN_MODEL_PATH,
+            out_folder=membrain_output_path,
+            segmentation_threshold=0.0,
+            store_probabilities=True
+        )
+        print(f"Segmentation saved to {segmentation_file}")
+        smooth_membranes(segmentation_file)
+        return
     denoised = Path(f"{tomo_name}_full_rec_BP_3DCTF_BIN4_denoised.mrc")
     if denoised.exists():
         segmentation_file = segment(

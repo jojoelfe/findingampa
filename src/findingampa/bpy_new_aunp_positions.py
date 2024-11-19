@@ -235,7 +235,9 @@ if  should_setup:
 
         bpy.context.evaluated_depsgraph_get().update()
 
-    membrain = Path("membrain") / f"{path.name[:-8]}3DCTF_BIN4_denoised_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
+    membrain = Path("membrain") / f"{path.name[:-8]}3DCTF_BIN4_ddw_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
+    if not membrain.exists():
+        membrain = Path("membrain") / f"{path.name[:-8]}3DCTF_BIN4_denoised_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
     if membrain.exists():
         membrain = mn.entities.density.ui.load(membrain.absolute(), invert=False,name="MemBrain")
         bpy.data.node_groups["MN_density_MemBrain.001"].nodes["Style Density Surface"].inputs[1].default_value = 125
