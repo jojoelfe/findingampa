@@ -6,7 +6,7 @@ import einops
 import torch.nn as nn
 import torch.optim as optim
 
-def calc_3dtm(tomo):
+def calc_3dtm(tomo, high_pass=None):
     from pytom_tm.tmjob import TMJob
     from pytom_tm.parallel import run_job_parallel
     from findingampa.utils.assets import FA_ASSETS
@@ -33,7 +33,7 @@ def calc_3dtm(tomo):
         tomogram_mask=None,
         voxel_size=10.0,
         low_pass=None,
-        high_pass=None,
+        high_pass=high_pass,
         dose_accumulation=None,
         ctf_data=None,
         whiten_spectrum=True,
@@ -75,25 +75,28 @@ class Gaussian3DList(nn.Module):
         )  # Sum over the gaussians
 
 def fit_gaussian_3d_list(score_volume, locations, boxsize, sign=1):
+    from torch_subpixel_crop import subpixel_crop_3d
+
     num_gaussians = len(locations)
     model = Gaussian3DList(num_gaussians,sign=sign).to(score_volume.device)
     optimizer = optim.Adam(model.parameters(), lr=0.01)
     criterion = nn.MSELoss()
 
     # Prepare the 4D tensor of boxes
-    boxes = []
-    for loc in locations:
-        x, y, z = loc
-        region = score_volume[x-boxsize//2:x+boxsize//2+1, y-boxsize//2:y+boxsize//2+1, z-boxsize//2:z+boxsize//2+1]
+    #boxes = []
+    #for loc in locations:
+    #    x, y, z = loc
+    #    region = score_volume[x-boxsize//2:x+boxsize//2+1, y-boxsize//2:y+boxsize//2+1, z-boxsize//2:z+boxsize//2+1]
         
-        boxes.append(region)
-    boxes = torch.stack(boxes).to(score_volume.device)  # Shape: (num_gaussians, boxsize, boxsize, boxsize)
+    #    boxes.append(region)
+    boxes = subpixel_crop_3d(score_volume, locations, boxsize)
+    #boxes = torch.stack(boxes).to(score_volume.device)  # Shape: (num_gaussians, boxsize, boxsize, boxsize)
 
     # Prepare the coordinates
     coords = torch.stack(torch.meshgrid(
-        torch.arange(boxsize+1),
-        torch.arange(boxsize+1),
-        torch.arange(boxsize+1)
+        torch.arange(boxsize),
+        torch.arange(boxsize),
+        torch.arange(boxsize)
     ), dim=-1).reshape(-1, 3).to(score_volume.device) - torch.tensor([boxsize//2, boxsize//2, boxsize//2], device=score_volume.device)
     x_coords = coords[:, 0].float()
     y_coords = coords[:, 1].float()
@@ -101,7 +104,7 @@ def fit_gaussian_3d_list(score_volume, locations, boxsize, sign=1):
 
     for _ in range(1000):  # Number of iterations
         optimizer.zero_grad()
-        output = model(x_coords, y_coords, z_coords).reshape(num_gaussians, boxsize+1, boxsize+1, boxsize+1)
+        output = model(x_coords, y_coords, z_coords).reshape(num_gaussians, boxsize, boxsize, boxsize)
         loss = criterion(output, boxes)
         loss.backward()
         optimizer.step()

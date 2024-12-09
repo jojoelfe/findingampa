@@ -596,8 +596,19 @@ def dynamo_table_to_relion4_star(
 
     print(combined[combined['tomo'] == 1][['x','y','z','tdrot','tilt','narot']])
 
+
+from enum import Enum
+
+class Tomotype(str, Enum):
+    BP = "BP"
+    DDW = "DDW"
+
+
 @app.command()
-def match_aunps():
+def match_aunps(
+    tomotype: Tomotype = Tomotype.BP,
+    high_pass: Optional[float] = None,
+):
     import torch
     import mrcfile
     from findingampa.utils.tm3d import calc_3dtm, fit_gaussian_3d_list
@@ -606,15 +617,21 @@ def match_aunps():
     except IndexError:
         typer.echo("No rawtlt file found")
         raise typer.Exit()
-    
-    locations_tomo, locations_score_volume, score_volume = calc_3dtm(Path(tomo_name+"_full_rec_BP_flat.mrc"))
+ 
+
+    tomo_suffix = {
+        Tomotype.BP: "_full_rec_BP_flat.mrc",
+        Tomotype.DDW: "_full_rec_BP_3DCTF_BIN4_ddw.mrc"
+    }
+
+    locations_tomo, locations_score_volume, score_volume = calc_3dtm(Path(tomo_name+tomo_suffix[tomotype]), high_pass=high_pass)
     score_volume = torch.tensor(score_volume).cuda()
-    fitted_params_list = fit_gaussian_3d_list(torch.tensor(score_volume), locations_score_volume.cuda(),6)
+    fitted_params_list = fit_gaussian_3d_list(torch.tensor(score_volume), locations_score_volume.cuda(),12)
     offsets = torch.tensor([[f['x0'], f['y0'], f['z0']] for f in fitted_params_list])
-    with mrcfile.open(tomo_name+"_full_rec_BP_flat.mrc", permissive=True) as f:
+    with mrcfile.open(tomo_name+tomo_suffix[tomotype], permissive=True) as f:
         tomo_tensor = torch.tensor(f.data)
 
-    tomo_fitted_params_list = fit_gaussian_3d_list(tomo_tensor.cuda(), locations_tomo.int().cuda(), 6, sign=-1)
+    tomo_fitted_params_list = fit_gaussian_3d_list(tomo_tensor.cuda(), locations_tomo.int().cuda(), 12, sign=-1)
     data = pd.DataFrame({'faTM_PeakX':locations_tomo[:,2].cpu().numpy(),
                         'faTM_PeakY':locations_tomo[:,1].cpu().numpy(),
                         'faTM_PeakZ':locations_tomo[:,0].cpu().numpy(),
@@ -626,17 +643,18 @@ def match_aunps():
                         'faTM_gaussianFitSigmaY':[f['sigma_y'] for f in fitted_params_list],
                         'faTM_gaussianFitSigmaZ':[f['sigma_z'] for f in fitted_params_list],
                         'faTM_gaussianFitAmplitude':[f['amplitude'] for f in fitted_params_list],
-                        'faTomo_gaussianFitX':[f['z0'] for f in tomo_fitted_params_list],
+                        'faTomo_gaussianFitX':[f['x0'] for f in tomo_fitted_params_list],
                         'faTomo_gaussianFitY':[f['y0'] for f in tomo_fitted_params_list],
-                        'faTomo_gaussianFitZ':[f['x0'] for f in tomo_fitted_params_list],
+                        'faTomo_gaussianFitZ':[f['z0'] for f in tomo_fitted_params_list],
                         'faTomo_gaussianFitSigmaX':[f['sigma_z'] for f in tomo_fitted_params_list],
                         'faTomo_gaussianFitSigmaY':[f['sigma_y'] for f in tomo_fitted_params_list],
                         'faTomo_gaussianFitSigmaZ':[f['sigma_x'] for f in tomo_fitted_params_list],
                         'faTomo_gaussianFitAmplitude':[f['amplitude'] for f in tomo_fitted_params_list]})
     aunppositions = Path.cwd() / "aunps" 
     aunppositions.mkdir(exist_ok=True)
-    starfile.write(data,aunppositions / "aunp_tm.star")
-    print(f"Wrote potential picks to {aunppositions / 'aunp_tm.star'}")
+    output_filename = aunppositions / f"aunp_tm_{tomotype.value}{'_HP' + str(high_pass) if high_pass is not None else ''}.star"
+    starfile.write(data,output_filename)
+    print(f"Wrote potential picks to {output_filename}")
 
 @app.command()
 def check_pixelsizes():
@@ -752,3 +770,33 @@ def correct_pixelsizes(
         print("Pixel sizes corrected")
     else:
         print("ERROR!: Pixel sizes not corrected")
+
+@app.command()
+def render_active_zonograms():
+    import bpy
+    import mrcfile
+    import numpy as np
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    
+    active_zonogram_folder = Path("active_zonograms")
+    active_zonogram_folder.mkdir(exist_ok=True)
+
+    from findingampa.utils.analysis import generate_active_zonograms, render_active_zonograms, render_active_zone_extend_via_blender
+
+    active_zonogram_data = generate_active_zonograms(tomo_name)
+
+    print(f"{len(active_zonogram_data)} active zonograms generated")
+
+    for i, az in enumerate(active_zonogram_data):
+        mrcfile.write(active_zonogram_folder / f"active_zonogram_{i}.mrc", az[2].numpy(), overwrite=True)
+        np.save(active_zonogram_folder / f"active_zonogram_{i}.npy",{"cs": az[0], "center": az[1], "objects": az[3]}, allow_pickle=True)
+
+        fig = render_active_zonograms(az)
+
+        fig.savefig(active_zonogram_folder / f"active_zonogram_{i}.png")
+
+        render_active_zone_extend_via_blender(str(Path.cwd() / "aunps/new_aunp_template_CJS_ddw.blend"), az[1], np.array(az[2].shape)[::-1], az[0], active_zonogram_folder / f"active_zonogram_{i}_position.png")
