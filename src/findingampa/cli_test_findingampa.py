@@ -305,4 +305,92 @@ def test_aunp_cc_tarotation(radius:float=8.0,plot:bool=True):
                 axs[j, i].axis('off')
     fig.tight_layout()
     plt.show()
+
+from enum import Enum
+
+class Tomotype(str, Enum):
+    BP = "BP"
+    DDW = "DDW"
+
+@app.command()
+def select_aunp_picks(
+    tomotype: Tomotype = Tomotype.BP,
+    high_pass: Optional[float] = None,
+    threshold: float = 3.8
+):
+    import torch
+    import mrcfile
+    import numpy as np
+    from imodmodel import ImodModel
+    from imodmodel.models import Object
+    from findingampa.utils.analysis import select_aunps
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+
+    azs = Path("active_zonograms").glob("active_zonogram_*.mrc")
+    azs = list(azs)
+    print(f"Selecting AuNPS in {len(azs)} active zones")
+    az_picks = []
+    postsyn_picks = []
+    for az in azs:
+        with mrcfile.open(az, permissive=True) as mrc:
+            res_ddw = torch.tensor(mrc.data.copy())
+        az_data = np.load(az.with_suffix(".npy") ,allow_pickle=True)
+        az_id = str(az.with_suffix("")).split("_")[-1]
+        aunpfilename_filename = Path("aunps") / f"aunp_tm_{tomotype.value}{'_HP' + str(high_pass) if high_pass is not None else ''}.star"
+        aunp_data = starfile.read(aunpfilename_filename)
+        fig, significant_picks_mask, selected_aunp_pos, selected_aunp_pos_mask, selected_aunp_pos_postsyn_mask = select_aunps(aunp_data, az_data, res_ddw, threshold)
+        diagnost_figure_filename = str(az.with_suffix(""))+"_selected_aunps.png"
+        fig.savefig(diagnost_figure_filename)
+        print(f"Saved diagnostic image {diagnost_figure_filename}")
+        az_picks.append(selected_aunp_pos_mask)
+        postsyn_picks.append(selected_aunp_pos_postsyn_mask)
+
+    selected_aunp_pos = aunp_data.loc[significant_picks_mask, ["faTM_PeakX", "faTM_PeakY", "faTM_PeakZ"]].to_numpy()
+    data_structure = pd.DataFrame(selected_aunp_pos, columns=["faCoordinateX", "faCoordinateY", "faCoordinateZ"])
+    data_structure["active_zone"] = -1
+    data_structure["postsynapse"] = False
+    model = ImodModel()
+    az_pick_filename = str(aunpfilename_filename.with_suffix(""))+f"_active_zone_noshift.mod"
+    for i, az in enumerate(azs):
+        data_structure.loc[az_picks[i], "active_zone"] = i
+        az_id = str(az.with_suffix("")).split("_")[-1]
+        filename = az_pick_filename[:-4] + f"_{az_id}.star"
+        #starfile.write(data_structure.loc[az_picks[i]], filename)
+        print(f"Saved picks to {filename}")
+        model.objects.append(Object.new_scattered_points(points=selected_aunp_pos[az_picks[i]]))
+        model.objects[-1].header.red = 1.0 - i *0.3
+        model.objects[-1].header.green = 0 + i*0.2
+        model.objects[-1].header.blue = 0 + i*0.2
+    for i, postsyn in enumerate(postsyn_picks):
+        data_structure.loc[postsyn, "postsynapse"] = True
     
+    model.objects.append(Object.new_scattered_points(points=selected_aunp_pos[np.logical_and(
+        data_structure["active_zone"] == -1,
+        data_structure["postsynapse"] == True
+    )]))
+    model.objects[-1].header.red = 0
+    model.objects[-1].header.green = 1.0
+    model.objects[-1].header.blue = 0
+    
+    
+    
+    
+    
+    model.objects.append(Object.new_scattered_points(points=selected_aunp_pos[np.logical_and(
+        data_structure["active_zone"] == -1,
+        data_structure["postsynapse"] == False
+    )]))
+    model.objects[-1].header.red = 0
+    model.objects[-1].header.green = 0
+    model.objects[-1].header.blue = 1.0
+
+    model.to_file(az_pick_filename)
+    #starfile.write(az_picks, az_pick_filename)
+    print(f"Saved picks to {az_pick_filename}")
+    filename = az_pick_filename[:-4] + f"_allnoshift.star"
+    #starfile.write(data_structure, filename)
+    print(f"Saved picks to {filename}")
