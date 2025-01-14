@@ -23,7 +23,7 @@ function updateImages() {
     viewer.addTiledImage({
         tileSource: {
             type: 'image',
-            url: 'images' + group.center
+            url: `/${dataset}/images` + group.center
         },
         x: 0,
         y: 0,
@@ -33,7 +33,7 @@ function updateImages() {
     viewer.addTiledImage({
         tileSource: {
             type: 'image',
-            url: 'images' + group.position
+            url: `/${dataset}/images` + group.position
         },
         x: 1,
         y: 0,
@@ -43,7 +43,7 @@ function updateImages() {
     viewer.addTiledImage({
         tileSource: {
             type: 'image',
-            url: 'images' + group.az
+            url: `/${dataset}/images` + group.az
         },
         x: 2,
         y: 0,
@@ -53,7 +53,7 @@ function updateImages() {
     viewer.addTiledImage({
         tileSource: {
             type: 'image',
-            url: 'images' + group.picks
+            url: `/${dataset}/images` + group.picks
         },
         x: 2,
         y: 0.6,
@@ -79,7 +79,7 @@ nextButton.addEventListener('click', () => {
     }
 });
 
-fetch('images')
+fetch(`/${dataset}/images`)
     .then(response => response.json())
     .then(data => {
         imageGroups = data;

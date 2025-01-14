@@ -30,10 +30,33 @@ def landing_page():
 
 @app.route('/<dir>/')
 def serve_index(dir):
-    return send_from_directory('.', 'index.html')
+    return render_template_string('''
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Image Browser</title>
+            <link rel="stylesheet" href="{{ url_for('serve_static', dir=dir, filename='styles.css') }}">
+            <script src="https://openseadragon.github.io/openseadragon/openseadragon.min.js"></script>
+        </head>
+        <body>
+            <h1 id="image-title"></h1>
+            <div id="openseadragon-viewer"></div>
+            <div id="navigation">
+                <button id="prev-button">Previous</button>
+                <button id="next-button">Next</button>
+            </div>
+            <script>
+                const dataset = "{{ dir }}";
+            </script>
+            <script src="{{ url_for('serve_static', dir=dir, filename='script.js') }}"></script>
+        </body>
+        </html>
+    ''', dir=dir)
 
 @app.route('/<dir>/images/<path:filename>')
-def serve_static_images(dir,filename):
+def serve_static_images(dir, filename):
     image_dir = f'/goliath/processing/Gouaux/CJS/BestTomo/ProcessingCJS/tomograms/{dir}/TOP_TOMOS/tomogram_overview_images/'
     print("Mine",image_dir,filename)
     return send_from_directory(image_dir, filename)

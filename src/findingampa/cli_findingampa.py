@@ -602,11 +602,13 @@ from enum import Enum
 class Tomotype(str, Enum):
     BP = "BP"
     DDW = "DDW"
+    CTF3D = "CTF3D"
 
 
 @app.command()
 def match_aunps(
     tomotype: Tomotype = Tomotype.BP,
+    tomotype_refine: Tomotype = Tomotype.CTF3D,
     high_pass: Optional[float] = None,
 ):
     import torch
@@ -621,14 +623,15 @@ def match_aunps(
 
     tomo_suffix = {
         Tomotype.BP: "_full_rec_BP_flat.mrc",
-        Tomotype.DDW: "_full_rec_BP_3DCTF_BIN4_ddw.mrc"
+        Tomotype.DDW: "_full_rec_BP_3DCTF_BIN4_ddw.mrc",
+        Tomotype.CTF3D: "_full_rec_BP_3DCTF_BIN4.mrc"
     }
 
     locations_tomo, locations_score_volume, score_volume = calc_3dtm(Path(tomo_name+tomo_suffix[tomotype]), high_pass=high_pass)
     score_volume = torch.tensor(score_volume).cuda()
     fitted_params_list = fit_gaussian_3d_list(torch.tensor(score_volume), locations_score_volume.cuda(),12)
     offsets = torch.tensor([[f['x0'], f['y0'], f['z0']] for f in fitted_params_list])
-    with mrcfile.open(tomo_name+tomo_suffix[tomotype], permissive=True) as f:
+    with mrcfile.open(tomo_name+tomo_suffix[tomotype_refine], permissive=True) as f:
         tomo_tensor = torch.tensor(f.data)
 
     tomo_fitted_params_list = fit_gaussian_3d_list(tomo_tensor.cuda(), locations_tomo.int().cuda(), 8, sign=-1)
@@ -646,9 +649,9 @@ def match_aunps(
                         'faTomo_gaussianFitX':[f['x0'] for f in tomo_fitted_params_list],
                         'faTomo_gaussianFitY':[f['y0'] for f in tomo_fitted_params_list],
                         'faTomo_gaussianFitZ':[f['z0'] for f in tomo_fitted_params_list],
-                        'faTomo_gaussianFitSigmaX':[f['sigma_z'] for f in tomo_fitted_params_list],
+                        'faTomo_gaussianFitSigmaX':[f['sigma_x'] for f in tomo_fitted_params_list],
                         'faTomo_gaussianFitSigmaY':[f['sigma_y'] for f in tomo_fitted_params_list],
-                        'faTomo_gaussianFitSigmaZ':[f['sigma_x'] for f in tomo_fitted_params_list],
+                        'faTomo_gaussianFitSigmaZ':[f['sigma_z'] for f in tomo_fitted_params_list],
                         'faTomo_gaussianFitAmplitude':[f['amplitude'] for f in tomo_fitted_params_list]})
     aunppositions = Path.cwd() / "aunps" 
     aunppositions.mkdir(exist_ok=True)
@@ -849,7 +852,7 @@ def select_aunp_picks(
         filename = az_pick_filename[:-4] + f"_{az_id}.star"
         starfile.write(data_structure.loc[az_picks[i]], filename)
         print(f"Saved picks to {filename}")
-        model.objects.append(Object.new_scattered_points(points=selected_aunp_pos[az_picks[i]]))
+        model.objects.append(Object.new_scattered_points(points=selected_aunp_pos[az_picks[i]]+np.array([0.5,0.5,0.0])))
         model.objects[-1].header.red = 1.0 - i *0.3
         model.objects[-1].header.green = 0 + i*0.2
         model.objects[-1].header.blue = 0 + i*0.2
@@ -859,7 +862,7 @@ def select_aunp_picks(
     model.objects.append(Object.new_scattered_points(points=selected_aunp_pos[np.logical_and(
         data_structure["active_zone"] == -1,
         data_structure["postsynapse"] == True
-    )]))
+    )]+np.array([0.5,0.5,0.0])))
     model.objects[-1].header.red = 0
     model.objects[-1].header.green = 1.0
     model.objects[-1].header.blue = 0
@@ -871,7 +874,7 @@ def select_aunp_picks(
     model.objects.append(Object.new_scattered_points(points=selected_aunp_pos[np.logical_and(
         data_structure["active_zone"] == -1,
         data_structure["postsynapse"] == False
-    )]))
+    )]+np.array([0.5,0.5,0.0])))
     model.objects[-1].header.red = 0
     model.objects[-1].header.green = 0
     model.objects[-1].header.blue = 1.0

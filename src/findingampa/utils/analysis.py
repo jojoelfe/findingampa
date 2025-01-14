@@ -384,12 +384,12 @@ def select_aunps(aunp_data, az_data, res_ddw, threshold = 3.8):
 
     # Get subplot from fig
     (axxy, axxz, axyz) = fig.get_axes()
-    axxy.scatter(selected_aunp_pos_transformed[:,0]+0.5, selected_aunp_pos_transformed[:,1]+0.5, s=1,c='r')
-    axxy.scatter(selected_aunp_pos_post_transformed[:,0]+0.5, selected_aunp_pos_post_transformed[:,1]+0.5, s=1,c='g')
-    axxz.scatter(selected_aunp_pos_transformed[:,2]+0.5, selected_aunp_pos_transformed[:,1]+0.5, s=1,c='r')
-    axxz.scatter(selected_aunp_pos_post_transformed[:,2]+0.5, selected_aunp_pos_post_transformed[:,1]+0.5, s=1,c='g')
-    axyz.scatter(selected_aunp_pos_transformed[:,0]+0.5, selected_aunp_pos_transformed[:,2]+0.5, s=1,c='r')
-    axyz.scatter(selected_aunp_pos_post_transformed[:,0]+0.5, selected_aunp_pos_post_transformed[:,2]+0.5, s=1,c='g')
+    axxy.scatter(selected_aunp_pos_transformed[:,0], selected_aunp_pos_transformed[:,1], s=1,c='r')
+    axxy.scatter(selected_aunp_pos_post_transformed[:,0], selected_aunp_pos_post_transformed[:,1], s=1,c='g')
+    axxz.scatter(selected_aunp_pos_transformed[:,2], selected_aunp_pos_transformed[:,1], s=1,c='r')
+    axxz.scatter(selected_aunp_pos_post_transformed[:,2], selected_aunp_pos_post_transformed[:,1], s=1,c='g')
+    axyz.scatter(selected_aunp_pos_transformed[:,0], selected_aunp_pos_transformed[:,2], s=1,c='r')
+    axyz.scatter(selected_aunp_pos_post_transformed[:,0], selected_aunp_pos_post_transformed[:,2], s=1,c='g')
     return fig, significant_picks_mask, selected_aunp_pos, selected_aunp_pos_mask, selected_aunp_pos_postsyn_mask
     #plt.show()
 

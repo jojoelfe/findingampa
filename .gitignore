@@ -159,3 +159,5 @@ Thumbs.db
 *.swp
 
 assets/
+
+experiments/CJS_testing/

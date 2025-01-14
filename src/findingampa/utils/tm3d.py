@@ -98,9 +98,9 @@ def fit_gaussian_3d_list(score_volume, locations, boxsize, sign=1):
         torch.arange(boxsize),
         torch.arange(boxsize)
     ), dim=-1).reshape(-1, 3).to(score_volume.device) - torch.tensor([boxsize//2, boxsize//2, boxsize//2], device=score_volume.device)
-    x_coords = coords[:, 0].float()
+    x_coords = coords[:, 2].float()
     y_coords = coords[:, 1].float()
-    z_coords = coords[:, 2].float()
+    z_coords = coords[:, 0].float()
 
     for _ in range(1000):  # Number of iterations
         optimizer.zero_grad()
