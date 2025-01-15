@@ -16,7 +16,7 @@ function updateImages() {
     const groupKey = groupKeys[currentGroupIndex];
     const group = imageGroups[groupKey];
     
-    imageTitle.textContent = groupKey;
+    imageTitle.textContent = `${groupKey} [${currentGroupIndex + 1}/${groupKeys.length}]`;
     
     viewer.world.removeAll();
     
@@ -63,6 +63,33 @@ function updateImages() {
     viewer.addHandler('tile-loaded', function() {
         viewer.viewport.fitBounds(viewer.world.getHomeBounds());
     });
+
+    const url = new URL(window.location);
+    url.searchParams.set('tomogram', groupKey);
+    window.history.pushState({}, '', url);
+
+    prefetchNextTomograms();
+}
+
+function prefetchNextTomograms() {
+    for (let i = 1; i <= 2; i++) {
+        if (currentGroupIndex + i < groupKeys.length) {
+            const nextGroupKey = groupKeys[currentGroupIndex + i];
+            const nextGroup = imageGroups[nextGroupKey];
+            
+            const imgCenter = new Image();
+            imgCenter.src = `/${dataset}/images` + nextGroup.center;
+            
+            const imgPosition = new Image();
+            imgPosition.src = `/${dataset}/images` + nextGroup.position;
+            
+            const imgAz = new Image();
+            imgAz.src = `/${dataset}/images` + nextGroup.az;
+            
+            const imgPicks = new Image();
+            imgPicks.src = `/${dataset}/images` + nextGroup.picks;
+        }
+    }
 }
 
 prevButton.addEventListener('click', () => {
@@ -84,5 +111,12 @@ fetch(`/${dataset}/images`)
     .then(data => {
         imageGroups = data;
         groupKeys = Object.keys(imageGroups);
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const tomogram = urlParams.get('tomogram');
+        if (tomogram && groupKeys.includes(tomogram)) {
+            currentGroupIndex = groupKeys.indexOf(tomogram);
+        }
+        
         updateImages();
     });

@@ -29,7 +29,8 @@ def landing_page():
     ''', directories=directories)
 
 @app.route('/<dir>/')
-def serve_index(dir):
+@app.route('/<dir>/<tomogram>')
+def serve_index(dir, tomogram=None):
     return render_template_string('''
         <!DOCTYPE html>
         <html lang="en">
@@ -58,12 +59,10 @@ def serve_index(dir):
 @app.route('/<dir>/images/<path:filename>')
 def serve_static_images(dir, filename):
     image_dir = f'/goliath/processing/Gouaux/CJS/BestTomo/ProcessingCJS/tomograms/{dir}/TOP_TOMOS/tomogram_overview_images/'
-    print("Mine",image_dir,filename)
     return send_from_directory(image_dir, filename)
 
 @app.route('/<dir>/static/<path:filename>')
 def serve_static(dir,filename):
-    print("Thine",dir, filename)
     return send_from_directory('.', filename)
 
 @app.route('/<dir>/images', methods=['GET'])
@@ -84,4 +83,4 @@ def get_images(dir):
     return jsonify(image_groups)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    app.run(debug=True, port=5001, host='0.0.0.0')
