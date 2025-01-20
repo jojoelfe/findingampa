@@ -60,11 +60,14 @@ def test_imod_backprojection(
         typer.echo("No rawtlt file found")
         raise typer.Exit()
     
-    aunp_coordinates = imodmodel.read("aunps/combined_savedpicks.mod")
-    aunp_coordinates = aunp_coordinates[['x', 'y', 'z']].to_numpy()
+    aunp_coordinates = starfile.read("aunps/aunp_tm_BP_active_zone_0.star")
+    aunp_coordinates = aunp_coordinates[['faCoordinateX', 'faCoordinateY', 'faCoordinateZ']].to_numpy()
     tilt_angle, rotation_angle, translations = read_transforms_from_tomo_to_tilt(f"{tomo_name}.tlt", f"{tomo_name}.xf")
-   
-    with mrcfile.open(f"{tomo_name}_full_rec_BP.mrc") as mrc:
+    tilt_angle += 25.8
+    print(tilt_angle)
+    print(rotation_angle)
+    print(translations)
+    with mrcfile.open(f"{tomo_name}_full_rec_BP_flat.mrc") as mrc:
         tomo_dim = mrc.header["nx"], mrc.header["ny"], mrc.header["nz"]
     with mrcfile.open(f"{tomo_name}_ali.mrc") as mrc:
         ali_dim = mrc.header["nx"], mrc.header["ny"]
@@ -72,10 +75,14 @@ def test_imod_backprojection(
         ori_dim = mrc.header["nx"], mrc.header["ny"]
     
     ali_coordinates, tilt_series_coordinates = aunp_coordinates_to_tiltseries(aunp_coordinates, tilt_angle, rotation_angle, translations, tomo_dim, ali_dim, ori_dim, x_offset=x_offset, y_offset=x_offset, z_offset=z_offset)
-    #with open("test_coordinates_rotated_rotated.txt", "w") as f:
-    #    for i, aunps in enumerate(test_coordinates_rotated_rotated):
-    #        for j, coordinates in enumerate(aunps):
-    #            f.write(f"1 {i+1} {coordinates[0]} {coordinates[1]} {j}\n")
+    with open("test_coordinates_rotated_rotated.txt", "w") as f:
+        for i, aunps in enumerate(tilt_series_coordinates):
+            for j, coordinates in enumerate(aunps):
+                f.write(f"1 {i+1} {coordinates[0]} {coordinates[1]} {j}\n")
+    with open("test_coordinates_rotated.txt", "w") as f:
+        for i, aunps in enumerate(ali_coordinates):
+            for j, coordinates in enumerate(aunps):
+                f.write(f"1 {i+1} {coordinates[0]} {coordinates[1]} {j}\n")
     
 
     tilt_coordinates = imodmodel.read("aunps_tiltseries.mod")
@@ -95,6 +102,7 @@ def test_aunp_cc(radius:float=8.0,plot:bool=True):
     from findingampa.utils.imod import read_transforms_from_tomo_to_tilt
     from findingampa.utils.transforms import aunp_coordinates_to_tiltseries, update_translations_from_shifts
 
+    from torch_fourier_filter.whitening import whitening_filter
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -103,12 +111,13 @@ def test_aunp_cc(radius:float=8.0,plot:bool=True):
     except IndexError:
         typer.echo("No rawtlt file found")
         raise typer.Exit()
-    
-    aunp_coordinates = imodmodel.read("aunps/combined_savedpicks.mod")
-    aunp_coordinates_orig = aunp_coordinates[['x', 'y', 'z']].to_numpy()
+    debug_path = Path("debug/").mkdir(exist_ok=True)
+    aunp_coordinates = starfile.read("aunps/aunp_tm_BP_active_zone_all.star")
+    aunp_coordinates = aunp_coordinates[np.logical_or(aunp_coordinates["postsynapse"]=="True",aunp_coordinates["active_zone"]==0)]
+    aunp_coordinates_orig = aunp_coordinates[['faCoordinateX', 'faCoordinateY', 'faCoordinateZ']].to_numpy()
     tilt_angle, rotation_angle, translations = read_transforms_from_tomo_to_tilt(f"{tomo_name}.tlt", f"{tomo_name}.xf")
-   
-    with mrcfile.open(f"{tomo_name}_full_rec_BP.mrc") as mrc:
+    tilt_angle += 25.8
+    with mrcfile.open(f"{tomo_name}_full_rec_BP_flat.mrc") as mrc:
         tomo_dim = mrc.header["nx"], mrc.header["ny"], mrc.header["nz"]
     with mrcfile.open(f"{tomo_name}_ali.mrc") as mrc:
         ali_dim = mrc.header["nx"], mrc.header["ny"]
@@ -126,11 +135,16 @@ def test_aunp_cc(radius:float=8.0,plot:bool=True):
         # Arrange len(matrices) subplots in a
         fig, axs = plt.subplots(2, len(tilt_series), figsize=(20, 4)) 
     shifts = []
+    dmrc = []
     for i in range(tilt_series.shape[0]):
         model_image, C = aunp_to_image2d(tilt_series_coordinates[:,i,[0,1]], tilt_series.shape[1:], radius, device)
+        if plot:
+            dmrc.append(model_image.cpu().numpy())
         model_image *= -1.0
-        image_product = torch.fft.fft2(tilt_series[i]) * torch.fft.fft2(model_image).conj()
-        cc_image = torch.fft.fftshift(torch.fft.ifft2(image_product))
+        dft = torch.fft.rfft2(tilt_series[i])
+        wf = whitening_filter(dft, tilt_series[i].shape, tilt_series[i].shape, rfft=True )
+        image_product = wf * dft * (wf * torch.fft.rfft2(model_image)).conj()
+        cc_image = torch.fft.fftshift(torch.fft.irfft2(image_product))
         
         sub_orig = cc_image.real[cc_image.real.shape[0]//2-100:cc_image.real.shape[0]//2+100,cc_image.real.shape[1]//2-100:cc_image.real.shape[1]//2+100]
         
@@ -167,7 +181,10 @@ def test_aunp_cc(radius:float=8.0,plot:bool=True):
             axs[0, i].axis('off')
             axs[1, i].axis('off')
             fig.tight_layout()
-            plt.show()
+            plt.savefig("test.png")
+    if plot:
+        with mrcfile.new(f"debug/model.mrc",overwrite=True) as mrc:
+            mrc.set_data(np.stack(dmrc))
     print("Updated translations")
     translations = update_translations_from_shifts(rotation_angle, translations, np.array(shifts)[:,:])
     ali_coordinates, tilt_series_coordinates = aunp_coordinates_to_tiltseries(aunp_coordinates_orig, tilt_angle, rotation_angle, translations, tomo_dim, ali_dim, ori_dim)

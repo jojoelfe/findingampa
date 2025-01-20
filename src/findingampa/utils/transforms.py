@@ -21,6 +21,7 @@ def aunp_coordinates_to_tiltseries(aunp_coordinates, tilt_angles, tilt_axes_angl
     import numpy as np
 
     rotations = R.from_euler('Y', tilt_angles, degrees=True)
+    print(tomo_dim)
     aunp_coordinates_to_center = aunp_coordinates - [tomo_dim[0]/2-x_offset, tomo_dim[1]/2-y_offset, tomo_dim[2]/2-z_offset]
     aunp_coordinates_rotated = np.array([rotations.apply(a) for a in aunp_coordinates_to_center])
     aunp_coordinates_rotated += [tomo_dim[0]/2-x_offset, tomo_dim[1]/2-y_offset, tomo_dim[2]/2-z_offset]
