@@ -106,11 +106,14 @@ def generate_active_zonograms(tomogram_name, active_zone = None):
         all_poins_transformed = (torch.tensor(all_poins) - torch.tensor(ap_center)) @ torch.tensor(coordinate_system.T)
         w, h, d = (torch.max(-torch.min(all_poins_transformed, dim=0).values, torch.max(all_poins_transformed, dim=0).values).floor() + 1).int()
         w += 30
+        w *= 2
         h += 30
+        h *= 2
         d += 10
-        x = torch.linspace(-w, w, 2*w+1, dtype=torch.float64)
-        y = torch.linspace(-h, h, 2*h+1, dtype=torch.float64)
-        z = torch.linspace(-d, d, 2*d+1, dtype=torch.float64)
+        d *= 2
+        x = torch.arange(0, w-0.99, 1, dtype=torch.float64) - w / 2
+        y = torch.arange(0, h-0.99, 1, dtype=torch.float64) - h / 2
+        z = torch.arange(0, d-0.99, 1, dtype=torch.float64) - d / 2 
         mg = torch.cartesian_prod(x, y, z)
         grid = mg @ torch.tensor(coordinate_system) + torch.tensor(ap_center)
         if grid.shape[1] > 90000000:
@@ -124,7 +127,7 @@ def generate_active_zonograms(tomogram_name, active_zone = None):
         grid_sc = grid / (torch.tensor(tomogram_data_ddw.shape).flip(dims=(0,)).double() / 2.0 ) - 1.0
 
 
-        grid_sc = grid_sc.reshape(1,2*w+1,2*h+1,2*d+1,3).float()
+        grid_sc = grid_sc.reshape(1,w,h,d,3).float()
         tomogram_data_ddw_sc = tomogram_data_ddw.reshape(1,1, *tomogram_data_ddw.shape)
         print("Starting grid sample")
         res_ddw = torch.nn.functional.grid_sample(tomogram_data_ddw_sc, grid_sc,align_corners=True)
@@ -136,6 +139,48 @@ def generate_active_zonograms(tomogram_name, active_zone = None):
         res_ddw = res_ddw.permute(*torch.arange(res_ddw.ndim - 1, -1, -1))
         return_data.append((coordinate_system, ap_center, res_ddw, paz))
     print("Done gaz")
+    return return_data
+
+def read_manual_active_zones(tomogram_name):
+    import json
+    from pathlib import Path
+    import torch
+    import mrcfile
+    try:
+        data = json.loads(Path("fa_manual_override.json").read_text())
+    except FileNotFoundError:
+        return []
+    
+    with mrcfile.open(f"{tomogram_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc") as mrc:
+        tomogram_data_ddw = torch.tensor(mrc.data.copy())
+    
+    return_data = []
+    for maz in data["manual_active_zones"]:
+        center = np.array(maz["center"])
+        size = np.array(maz["size"])
+        rotation = np.array(maz["rotation"])
+
+        x = torch.arange(0, size[0]-0.99, 1, dtype=torch.float64) - size[0] / 2
+        y = torch.arange(0, size[1]-0.99, 1, dtype=torch.float64) - size[1] / 2
+        z = torch.arange(0, size[2]-0.99, 1, dtype=torch.float64) - size[2] / 2 
+        mg = torch.cartesian_prod(x, y, z)
+        grid = mg @ torch.tensor(rotation) + torch.tensor(center)
+        if grid.shape[1] > 90000000:
+            raise ValueError("Too many points to plot")
+       
+
+        grid_sc = grid / (torch.tensor(tomogram_data_ddw.shape).flip(dims=(0,)).double() / 2.0 ) - 1.0
+
+
+        grid_sc = grid_sc.reshape(1,int(size[0]),int(size[1]),int(size[2]),3).float()
+        tomogram_data_ddw_sc = tomogram_data_ddw.reshape(1,1, *tomogram_data_ddw.shape)
+        print("Starting grid sample")
+        res_ddw = torch.nn.functional.grid_sample(tomogram_data_ddw_sc, grid_sc,align_corners=True)
+        
+        res_ddw = res_ddw [0,0]
+       
+        res_ddw = res_ddw.permute(*torch.arange(res_ddw.ndim - 1, -1, -1))
+        return_data.append((rotation, center, res_ddw, ()))
     return return_data
 
 def render_active_zonograms(active_zone_data):

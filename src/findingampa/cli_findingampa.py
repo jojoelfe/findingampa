@@ -788,11 +788,17 @@ def render_active_zonograms():
     active_zonogram_folder = Path("active_zonograms")
     active_zonogram_folder.mkdir(exist_ok=True)
 
-    from findingampa.utils.analysis import generate_active_zonograms, render_active_zonograms, render_active_zone_extend_via_blender
+    from findingampa.utils.analysis import generate_active_zonograms, render_active_zonograms, render_active_zone_extend_via_blender, read_manual_active_zones
 
     active_zonogram_data = generate_active_zonograms(tomo_name)
 
     print(f"{len(active_zonogram_data)} active zonograms generated")
+
+    manual_azs = read_manual_active_zones(tomo_name)
+
+    print(f"{len(manual_azs)} manual active zone")
+
+    active_zonogram_data += manual_azs
 
     for i, az in enumerate(active_zonogram_data):
         mrcfile.write(active_zonogram_folder / f"active_zonogram_{i}.mrc", az[2].numpy(), overwrite=True)
@@ -803,7 +809,28 @@ def render_active_zonograms():
         fig.savefig(active_zonogram_folder / f"active_zonogram_{i}.png")
 
         render_active_zone_extend_via_blender(str(Path.cwd() / "aunps/new_aunp_template_CJS_ddw.blend"), az[1], np.array(az[2].shape)[::-1], az[0], active_zonogram_folder / f"active_zonogram_{i}_position.png")
+
+@app.command()
+def create_manual_active_zone():
+    import os
+    from findingampa.utils.assets import FA_ASSETS
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
     
+    BLENDER_PATH = FA_ASSETS / "blender" / "4_3" / "blender"
+    
+    if not BLENDER_PATH.exists():
+        typer.echo("Blender not found")
+        raise typer.Exit()
+    
+    instance_template_file = str(Path.cwd() / "aunps/new_aunp_template_CJS_ddw.blend")
+   
+    os.system(f"{BLENDER_PATH} {instance_template_file}  -P {Path(__file__).parent / 'bpy_manual_active_zone.py'} --  --findingampa {Path(__file__).parent.parent}")   
+
+
 @app.command()
 def select_aunp_picks(
     tomotype: Tomotype = Tomotype.BP,
