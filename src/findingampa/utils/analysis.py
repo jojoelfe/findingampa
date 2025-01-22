@@ -370,47 +370,67 @@ def select_aunps(aunp_data, az_data, res_ddw, threshold = 3.8):
     import pymeshlab
     from pathlib import Path
     from scipy.spatial import cKDTree
+    import json
 
-    amp_rank, amp_pro = calculate_probit(aunp_data["faTomo_gaussianFitAmplitude"].to_numpy()* -1)
-    pea_rank, pea_pro = calculate_probit(aunp_data["faTM_PeakScore"].to_numpy())
 
-    Dinv_, Uinv__ = estimate_anisotropic_gaussian_for_probit(amp_pro, pea_pro, None, False, False)
-    pval,neg_log_p1q_equ_pro_ = calculate_1q_p_value(amp_pro, pea_pro, Dinv_, Uinv__)
+    try:
+        data = json.loads(Path("fa_manual_override.json").read_text())
+    except FileNotFoundError:
+        data = {}
+    if "aunp_thresholds" in data:
+        print("Using manual thresholds")
+        significant_picks_mask = np.logical_and(
+            aunp_data["faTomo_gaussianFitAmplitude"] < data["aunp_thresholds"]["amplitude"],
+            aunp_data["faTomo_gaussianFitSigmaX"] < data["aunp_thresholds"]["sigmax"],
+            aunp_data["faTM_PeakScore"] > data["aunp_thresholds"]["score"]
+        )
+    else:
+        amp_rank, amp_pro = calculate_probit(aunp_data["faTomo_gaussianFitAmplitude"].to_numpy()* -1)
+        pea_rank, pea_pro = calculate_probit(aunp_data["faTM_PeakScore"].to_numpy())
+
+        Dinv_, Uinv__ = estimate_anisotropic_gaussian_for_probit(amp_pro, pea_pro, None, False, False)
+        pval,neg_log_p1q_equ_pro_ = calculate_1q_p_value(amp_pro, pea_pro, Dinv_, Uinv__)
+        significant_picks_mask = neg_log_p1q_equ_pro_ > threshold
         
 
 
     fig = render_active_zonograms((None,None,res_ddw))
 
 
-    significant_picks_mask = neg_log_p1q_equ_pro_ > threshold
+    
     sel_aunps = aunp_data[significant_picks_mask]
-
-    presynaptic_glb =  Path("aunps") / "presynatpticmembranes.glb"
-    postsynaptic_glb =  Path("aunps") / "postsynapticmembranes.glb"
-    prems = pymeshlab.MeshSet()
-    prems.load_new_mesh(str(presynaptic_glb))
-    postms = pymeshlab.MeshSet()
-    postms.load_new_mesh(str(postsynaptic_glb))
-
-    prems.set_current_mesh(az_data.tolist()['objects'][0])
-    prem = prems.current_mesh()
-    pre_points = prem.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
-    pre_normals = prem.vertex_normal_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
-    postms.set_current_mesh(az_data.tolist()['objects'][1])
-    postm = postms.current_mesh()
-    post_points = postm.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
-    post_normals = postm.vertex_normal_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
-    pre_tree = cKDTree(pre_points)
-    post_tree = cKDTree(post_points)
-
 
     selected_aunp_pos = sel_aunps[["faTM_PeakX", "faTM_PeakY", "faTM_PeakZ"]].values + sel_aunps[["faTomo_gaussianFitX", "faTomo_gaussianFitY", "faTomo_gaussianFitZ"]].values
 
-    pre_dis, pre_idx = pre_tree.query(selected_aunp_pos)
-    post_dis, post_idx = post_tree.query(selected_aunp_pos)
+    if len(az_data.tolist()['objects']) < 0:
+        presynaptic_glb =  Path("aunps") / "presynatpticmembranes.glb"
+        postsynaptic_glb =  Path("aunps") / "postsynapticmembranes.glb"
+        prems = pymeshlab.MeshSet()
+        prems.load_new_mesh(str(presynaptic_glb))
+        postms = pymeshlab.MeshSet()
+        postms.load_new_mesh(str(postsynaptic_glb))
 
-    selected_aunp_pos_mask = np.logical_and(pre_dis < 30, post_dis < 30)
-    selected_aunp_pos_postsyn_mask = np.logical_and(post_dis < 30, np.logical_not(selected_aunp_pos_mask))
+        prems.set_current_mesh(az_data.tolist()['objects'][0])
+        prem = prems.current_mesh()
+        pre_points = prem.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+        pre_normals = prem.vertex_normal_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+        postms.set_current_mesh(az_data.tolist()['objects'][1])
+        postm = postms.current_mesh()
+        post_points = postm.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+        post_normals = postm.vertex_normal_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+        pre_tree = cKDTree(pre_points)
+        post_tree = cKDTree(post_points)
+
+
+
+        pre_dis, pre_idx = pre_tree.query(selected_aunp_pos)
+        post_dis, post_idx = post_tree.query(selected_aunp_pos)
+
+        selected_aunp_pos_mask = np.logical_and(pre_dis < 30, post_dis < 30)
+        selected_aunp_pos_postsyn_mask = np.logical_and(post_dis < 30, np.logical_not(selected_aunp_pos_mask))
+    else:
+        selected_aunp_pos_mask = np.ones(selected_aunp_pos.shape[0], dtype=bool)
+        selected_aunp_pos_postsyn_mask = np.zeros(selected_aunp_pos.shape[0], dtype=bool)
     #selected_aunp_pos_postsyn_mask = np.logical_and(selected_aunp_pos_postsyn_mask,
     # For this to work whe have to select the outer leaflet of the postsynaptic membrane
     #dot_mask = np.einsum('ij,ij->i', post_normals[post_idx], selected_aunp_pos-post_points[post_idx]) > 0

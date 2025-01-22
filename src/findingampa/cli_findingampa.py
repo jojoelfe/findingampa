@@ -913,3 +913,10 @@ def select_aunp_picks(
     starfile.write(data_structure, filename)
     print(f"Saved picks to {filename}")
 
+@app.command()
+def manual_aunp_selection():
+    from streamlit.web import cli
+
+    cli.main(["run", str(Path(__file__).parent / "manual_aunp_selection.py")])
+
+    
