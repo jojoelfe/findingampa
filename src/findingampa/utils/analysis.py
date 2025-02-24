@@ -58,10 +58,7 @@ def create_coordinate_system_from_points(presynaptic_points, postsynaptic_points
     all_poins = np.concatenate([presynaptic_points, postsynaptic_points])
 
     ap_center = np.mean(all_poins, axis=0)
-    #u, sigma, v = np.linalg.svd((all_poins-ap_center).T)
-    #norm_vector = u[:,2] / np.linalg.norm(u[:,2])
-    #norm_vector = np.mean(postsynaptic_points, axis=0) - np.mean(presynaptic_points, axis=0)
-    #norm_vector = norm_vector / np.linalg.norm(norm_vector)
+    print("Points in pre and post: ",len(presynaptic_points), len(postsynaptic_points))
 
     # Get 100 random points in postsynapse
     post_points_sel = postsynaptic_points[np.random.choice(postsynaptic_points.shape[0], 100, replace=False)]
@@ -69,7 +66,9 @@ def create_coordinate_system_from_points(presynaptic_points, postsynaptic_points
     pre_dis, pre_i = cKDTree(presynaptic_points).query(post_points_sel)
     pre_points_el = presynaptic_points[pre_i]
     norm_vector = np.mean(post_points_sel - pre_points_el, axis=0)
+    print(norm_vector)
     norm_vector = norm_vector / np.linalg.norm(norm_vector)
+
    
 
     z = np.array([0, 0, 1])
@@ -153,7 +152,8 @@ def read_manual_active_zones(tomogram_name):
     
     with mrcfile.open(f"{tomogram_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc") as mrc:
         tomogram_data_ddw = torch.tensor(mrc.data.copy())
-    
+    if "manual_active_zones" not in data:
+        return []
     return_data = []
     for maz in data["manual_active_zones"]:
         center = np.array(maz["center"])
@@ -274,10 +274,11 @@ def find_surfaces(coors):
     ransac = RANSACRegressor(LinearRegression(), residual_threshold=1, max_trials=1000)
     ransac.fit(coors[:,1:3], coors[:,0])
 
-    print(f"PLane 1 {ransac.estimator_.coef_, ransac.estimator_.intercept_}")
+    print(f"Plane 1: {ransac.estimator_.coef_, ransac.estimator_.intercept_}")
 
     # Get all points within 10 of plane
-    near_mask = np.abs(coors[:,0] - ransac.predict(coors[:,1:3])) < 5
+    distance_plane1 = np.abs(coors[:,0] - ransac.predict(coors[:,1:3]))
+    near_mask = distance_plane1 < 5
     center = np.array([375,500,500]) // 2
     away_mask = np.sign(coors[:,0] - ransac.predict(coors[:,1:3])) != np.sign(center[0]- ransac.predict(np.expand_dims(center[1:3],0)))
     sel_mask = np.logical_or(near_mask,away_mask)
@@ -289,12 +290,13 @@ def find_surfaces(coors):
     print(f"Plane 2:{ransac2.estimator_.coef_, ransac2.estimator_.intercept_}")
 
     # Get all points within 5 of plane
-    near_mask = np.abs(coors[:,0] - ransac2.predict(coors[:,1:3])) < 5
+    distance_plane2 = np.abs(coors[:,0] - ransac2.predict(coors[:,1:3]))
+    near_mask = distance_plane2 < 5
     center = np.array([375,500,500]) // 2
     away_mask = np.sign(coors[:,0] - ransac2.predict(coors[:,1:3])) != np.sign(center[0]- ransac2.predict(np.expand_dims(center[1:3],0)))
     sel_mask2 = np.logical_or(near_mask,away_mask)
 
-    return (sel_mask, sel_mask2)
+    return (distance_plane1, distance_plane2)
 
 
 from scipy.special import erfinv, erf
@@ -384,6 +386,10 @@ def select_aunps(aunp_data, az_data, res_ddw, threshold = 3.8):
             aunp_data["faTomo_gaussianFitSigmaX"] < data["aunp_thresholds"]["sigmax"],
             aunp_data["faTM_PeakScore"] > data["aunp_thresholds"]["score"]
         )
+        if "plane1_elimination" in data["aunp_thresholds"] and data["aunp_thresholds"]["plane1_elimination"]:
+            significant_picks_mask = np.logical_and(significant_picks_mask, aunp_data["faTomo_Surface1"] > data["aunp_thresholds"]["plane1_distance_cutoff"])
+        if "plane2_elimination" in data["aunp_thresholds"] and data["aunp_thresholds"]["plane2_elimination"]:
+            significant_picks_mask = np.logical_and(significant_picks_mask, aunp_data["faTomo_Surface2"] > data["aunp_thresholds"]["plane2_distance_cutoff"])
     else:
         amp_rank, amp_pro = calculate_probit(aunp_data["faTomo_gaussianFitAmplitude"].to_numpy()* -1)
         pea_rank, pea_pro = calculate_probit(aunp_data["faTM_PeakScore"].to_numpy())
@@ -402,7 +408,7 @@ def select_aunps(aunp_data, az_data, res_ddw, threshold = 3.8):
 
     selected_aunp_pos = sel_aunps[["faTM_PeakX", "faTM_PeakY", "faTM_PeakZ"]].values + sel_aunps[["faTomo_gaussianFitX", "faTomo_gaussianFitY", "faTomo_gaussianFitZ"]].values
 
-    if len(az_data.tolist()['objects']) < 0:
+    if len(az_data.tolist()['objects']) > 0:
         presynaptic_glb =  Path("aunps") / "presynatpticmembranes.glb"
         postsynaptic_glb =  Path("aunps") / "postsynapticmembranes.glb"
         prems = pymeshlab.MeshSet()

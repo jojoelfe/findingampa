@@ -614,6 +614,7 @@ def match_aunps(
     import torch
     import mrcfile
     from findingampa.utils.tm3d import calc_3dtm, fit_gaussian_3d_list
+    from findingampa.utils.analysis import find_surfaces
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
     except IndexError:
@@ -635,6 +636,9 @@ def match_aunps(
         tomo_tensor = torch.tensor(f.data)
 
     tomo_fitted_params_list = fit_gaussian_3d_list(tomo_tensor.cuda(), locations_tomo.int().cuda(), 8, sign=-1)
+
+    d1, d2 = find_surfaces(locations_tomo.cpu().numpy())
+
     data = pd.DataFrame({'faTM_PeakX':locations_tomo[:,2].cpu().numpy(),
                         'faTM_PeakY':locations_tomo[:,1].cpu().numpy(),
                         'faTM_PeakZ':locations_tomo[:,0].cpu().numpy(),
@@ -652,7 +656,10 @@ def match_aunps(
                         'faTomo_gaussianFitSigmaX':[f['sigma_x'] for f in tomo_fitted_params_list],
                         'faTomo_gaussianFitSigmaY':[f['sigma_y'] for f in tomo_fitted_params_list],
                         'faTomo_gaussianFitSigmaZ':[f['sigma_z'] for f in tomo_fitted_params_list],
-                        'faTomo_gaussianFitAmplitude':[f['amplitude'] for f in tomo_fitted_params_list]})
+                        'faTomo_gaussianFitAmplitude':[f['amplitude'] for f in tomo_fitted_params_list],
+                        'faTomo_Surface1':d1,
+                        'faTomo_Surface2':d2}
+                        )
     aunppositions = Path.cwd() / "aunps" 
     aunppositions.mkdir(exist_ok=True)
     output_filename = aunppositions / f"aunp_tm_{tomotype.value}{'_HP' + str(high_pass) if high_pass is not None else ''}.star"
@@ -867,7 +874,7 @@ def select_aunp_picks(
         print(f"Saved diagnostic image {diagnost_figure_filename}")
         az_picks.append(selected_aunp_pos_mask)
         postsyn_picks.append(selected_aunp_pos_postsyn_mask)
-
+    
     data_structure = pd.DataFrame(selected_aunp_pos, columns=["faCoordinateX", "faCoordinateY", "faCoordinateZ"])
     data_structure["active_zone"] = -1
     data_structure["postsynapse"] = False

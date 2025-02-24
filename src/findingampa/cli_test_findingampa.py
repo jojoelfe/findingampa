@@ -411,3 +411,70 @@ def select_aunp_picks(
     filename = az_pick_filename[:-4] + f"_allnoshift.star"
     #starfile.write(data_structure, filename)
     print(f"Saved picks to {filename}")
+
+@app.command()
+def create_ampa_positions():
+    import numpy as np
+    from scipy.spatial import cKDTree as KDTree
+    from scipy.spatial import distance
+    from scipy.spatial.transform import Rotation as R
+    from imodmodel import ImodModel
+    from imodmodel.models import Object, ObjectHeader, Contour, ContourHeader, IMAT,SLAN
+
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+
+    aunp_filename = "aunps/aunp_tm_BP_active_zone_all.star"
+    aunp_data = starfile.read(aunp_filename)
+
+
+    post_synapse = []
+    for ps_txt in Path("aunps/").glob("postsynapticmembranes_*.txt"):
+        post_synapse.append(np.loadtxt(ps_txt))
+    post_synapse = np.concatenate(post_synapse)
+
+    coordinates = aunp_data[['faCoordinateX', 'faCoordinateY', 'faCoordinateZ']].to_numpy()
+    tree = KDTree(coordinates)
+    raw_pairs = tree.query_pairs(15)  # Find pairs with distance less than 150A
+
+    # Sort pairs by difference of distance to optimal distance
+    sorted_pairs = sorted(raw_pairs, key=lambda pair: abs(distance.euclidean(coordinates[pair[0]], coordinates[pair[1]])-8.5))
+    pair_points = np.array([[pair[0],pair[1],*((coordinates[pair[0]]+coordinates[pair[1]])/2)] for pair in sorted_pairs])
+
+    ps_tree = KDTree(post_synapse)
+    distances, point_idx = ps_tree.query(pair_points[:,2:])
+    pair_points = pair_points[distances < 20]
+    print(f"{len(pair_points)} pairs found")
+    points_idx = point_idx[distances < 20]
+    model = ImodModel()
+    model.objects.append(Object(
+                header=ObjectHeader(contsize=len(pair_points)),
+                contours=[
+                    Contour(header=ContourHeader(
+                        psize=4, 
+                        flags=16, 
+                        time=0, 
+                        surf=0), 
+                        points=np.array([coordinates[int(points[0])], coordinates[int(points[1])], points[2:], post_synapse[int(points_idx[i])]]),
+                        extra=[]
+                        ) for i, points in enumerate(pair_points)
+                    ], 
+                imat = IMAT()    
+            ))
+    v1s = coordinates[pair_points[:,0].astype(int)] - coordinates[pair_points[:,1].astype(int)]
+    # X angle should 
+    v2s = post_synapse[points_idx] - pair_points[:,2:]
+    
+    rots = [R.align_vectors([[1, 0, 0],[0,1,0]], [v1,v2])[0] for v1, v2 in zip(v1s, v2s)]
+    eulers = [rot.as_euler("yxz", degrees=True) + [0,0,90] for rot in rots]
+    print(eulers)
+    
+    model.slicer_angles = [SLAN(time=1,
+                                angles=eulers[i],
+                center=pair_points[i][2:],
+                label="test") for i in range(len(pair_points))]
+    model.to_file(f"test1.mod")
+
