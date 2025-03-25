@@ -174,6 +174,28 @@ def ddw():
     Popen(f"ssh exahead1 srun -p gouaux --mem 32G --time 5:00:00 -c 10 --gres gpu:a40:1 /home/exacloud/gscratch/gouaux/CJS/deepdewedge/ddw_env/bin/ddw refine-tomogram --tomo0-files /home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/{tomo_name}_full_rec_BP_3DCTF_BIN4_EVN.mrc  --tomo1-files /home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/{tomo_name}_full_rec_BP_3DCTF_BIN4_ODD.mrc --subtomo-size 96 --mw-angle 84 --subtomo-overlap 32 --batch-size 5 --model-checkpoint-file /home/exacloud/gscratch/gouaux/CJS/deepdewedge/checkpoints/{check_point_file} --output-dir /home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/ --num-workers 10 --gpu 0", shell=True).wait()
     Popen(f"scp exahead1:/home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/{tomo_name}*_refined.mrc {tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc", shell=True).wait()
 
+@app.command()
+def ddw_aretomo(
+    folder: Optional[Path] = None
+):
+    import mrcfile
+    try:
+        if folder is None:
+            folder = Path.cwd()
+        tomo_name = list(folder.glob("*EVN_Vol.mrc"))[0].stem[:-8]
+    except IndexError:
+        typer.echo("No tomo file found")
+        raise typer.Exit()
+
+    from subprocess import Popen, PIPE, DEVNULL, STDOUT
+
+    print(f"Running DDW for {tomo_name}")
+    Popen(f"scp *EVN_Vol.mrc *ODD_Vol.mrc 10.137.46.10:/juliet/scratch/andecath/ddw_temp/", shell=True, cwd=folder,stdout=DEVNULL,stderr=STDOUT).wait()
+    Popen(f"ssh 10.137.46.10 newstack -mu 1000000,0 /juliet/scratch/andecath/ddw_temp/{tomo_name}_EVN_Vol.mrc /juliet/scratch/andecath/ddw_temp/{tomo_name}_EVN_Vol.mrc ", shell=True,stdout=DEVNULL,stderr=STDOUT).wait()
+    Popen(f"ssh 10.137.46.10 newstack -mu 1000000,0 /juliet/scratch/andecath/ddw_temp/{tomo_name}_ODD_Vol.mrc /juliet/scratch/andecath/ddw_temp/{tomo_name}_ODD_Vol.mrc ", shell=True,stdout=DEVNULL,stderr=STDOUT).wait()
+    Popen(f"ssh 10.137.46.10 /juliet/scratch/andecath/DeepDeWedge/env/bin/ddw refine-tomogram --tomo0-files /juliet/scratch/andecath/ddw_temp/{tomo_name}_EVN_Vol.mrc  --tomo1-files /juliet/scratch/andecath/ddw_temp/{tomo_name}_ODD_Vol.mrc --subtomo-size 96 --mw-angle 84 --subtomo-overlap 32 --batch-size 10 --model-checkpoint-file /juliet/scratch/andecath/ddw_temp/epoch=409-val_loss=13.62301.ckpt --output-dir /juliet/scratch/andecath/ddw_temp/ --num-workers 10 --gpu 0", shell=True,stdout=DEVNULL,stderr=STDOUT).wait()
+    Popen(f"scp 10.137.46.10:/juliet/scratch/andecath/ddw_temp/{tomo_name}*_refined.mrc {tomo_name}_Vol_ddw.mrc", shell=True,cwd=folder,stdout=DEVNULL,stderr=STDOUT).wait()
+    print(f"Finished DDW {tomo_name}")
 
 @app.command()
 def new_annotate_aunps(
@@ -529,7 +551,8 @@ def create_bin_3dctf_tomogram(
     
 @app.command()
 def write_dynamo_table(
-    positions_set: str,
+    ampa_pose_file: str,
+    tomo_id: int = 1
 ):
     import dynamotable
     import starfile
@@ -538,23 +561,30 @@ def write_dynamo_table(
     except IndexError:
         typer.echo("No rawtlt file found")
         raise typer.Exit()
-    rlnTomoImportParticleFile = Path.cwd() / "ampa_positions" / f"{positions_set}.star"
+    rlnTomoImportParticleFile = ampa_pose_file
     relion_data = starfile.read(rlnTomoImportParticleFile)['particles']
 
     dynamo_dicts = [
         {
-            "x": x["rlnCoordinateX"] * 2.0,
-            "y": x["rlnCoordinateY"] * 2.0,
-            "z": x["rlnCoordinateZ"] * 2.0,
-            "tag": i+1,
+            "x": x["rlnCoordinateX"],
+            "y": x["rlnCoordinateY"],
+            "z": x["rlnCoordinateZ"],
+            "tag": i+1 + 1000 * tomo_id ,
             "tdrot": x["rlnAnglePsi"] + 90,
             "tilt": - x["rlnAngleTilt"],
             "narot": x["rlnAngleRot"] + 270,
+            "tomo": tomo_id,
+            "ymintilt": -48,
+            "ymaxtilt": 48,
+            "ftype": 1,
+            "aligned_value": 1,
+            "averaged_value": 1,
+
         } for i, x in relion_data.iterrows()
     ]
 
     dynamo_data = pd.DataFrame(dynamo_dicts)
-    dynamotable.write(dynamo_data, Path.cwd() / "ampa_positions" / f"{positions_set}.tbl")
+    dynamotable.write(dynamo_data, Path(ampa_pose_file).with_suffix(".tbl"))
 
 @app.command()
 def dynamo_table_to_relion4_star(
@@ -842,6 +872,7 @@ def create_manual_active_zone():
 def select_aunp_picks(
     tomotype: Tomotype = Tomotype.BP,
     high_pass: Optional[float] = None,
+    skip_segment_activezone: bool = False,
     threshold: float = 3.8
 ):
     import torch
@@ -868,7 +899,7 @@ def select_aunp_picks(
         az_id = str(az.with_suffix("")).split("_")[-1]
         aunpfilename_filename = Path("aunps") / f"aunp_tm_{tomotype.value}{'_HP' + str(high_pass) if high_pass is not None else ''}.star"
         aunp_data = starfile.read(aunpfilename_filename)
-        fig, significant_picks_mask, selected_aunp_pos, selected_aunp_pos_mask, selected_aunp_pos_postsyn_mask = select_aunps(aunp_data, az_data, res_ddw, threshold)
+        fig, significant_picks_mask, selected_aunp_pos, selected_aunp_pos_mask, selected_aunp_pos_postsyn_mask = select_aunps(aunp_data, az_data, res_ddw, threshold, skip_segment_activezone)
         diagnost_figure_filename = str(az.with_suffix(""))+"_selected_aunps.png"
         fig.savefig(diagnost_figure_filename)
         print(f"Saved diagnostic image {diagnost_figure_filename}")
@@ -925,5 +956,48 @@ def manual_aunp_selection():
     from streamlit.web import cli
 
     cli.main(["run", str(Path(__file__).parent / "manual_aunp_selection.py")])
+
+@app.command()
+def create_relion_starfile(
+    output_name: str,
+    aunp_distance_cutoffs_A: tuple[float, float] = (60, 100),
+    membrane_distance_cutoffs_A: tuple[float, float] = (170, 230),
+):
+    import starfile
+    import pymeshlab
+    import numpy as np
+    from findingampa.utils.ampa_poses import estimate_ampa_poses
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    
+    aunp_data = starfile.read("aunps/aunp_tm_BP_active_zone_all.star")
+    aunp_coordinates = aunp_data[["faCoordinateX","faCoordinateY","faCoordinateZ"]].values
+    postsynaptic_data_filename = Path("aunps") / "postsynapticmembranes.glb" 
+    postms = pymeshlab.MeshSet()
+    postms.load_new_mesh(str(postsynaptic_data_filename))
+
+    # Iterate through meshes in postms and add vertex coordinates to numpy array
+    vertex_arrays = []
+    for mesh_index in range(postms.number_meshes()):
+        postms.set_current_mesh(mesh_index)
+        # Get vertex coordinates and add to numpy array
+        vertex_arrays.append(postms.current_mesh().vertex_matrix().copy()[:,[0,2,1]] * np.array([10,-10,10]))
+
+    postsynaptic_data = np.concatenate(vertex_arrays)
+
+    estimate_ampa_poses(
+        tomo_name,
+        aunp_coordinates,
+        postsynaptic_data,
+        output_filename=output_name,
+        inter_aunp_distance=(aunp_distance_cutoffs_A[0]/10, aunp_distance_cutoffs_A[1]/10),
+        aunp_membrane_distance=(membrane_distance_cutoffs_A[0]/10, membrane_distance_cutoffs_A[1]/10)
+    )
+    
+    
+
 
     

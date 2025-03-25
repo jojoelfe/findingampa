@@ -367,7 +367,7 @@ def calculate_1q_p_value(ag_x1_, ag_x2_, Dinv_, Uinv__):
 
     return p1q_equ_r_,-np.log(p1q_equ_r_)
 
-def select_aunps(aunp_data, az_data, res_ddw, threshold = 3.8):
+def select_aunps(aunp_data, az_data, res_ddw, threshold = 3.8, skip_segment_activezone = False):
     from findingampa.utils.analysis import render_active_zonograms
     import pymeshlab
     from pathlib import Path
@@ -408,7 +408,7 @@ def select_aunps(aunp_data, az_data, res_ddw, threshold = 3.8):
 
     selected_aunp_pos = sel_aunps[["faTM_PeakX", "faTM_PeakY", "faTM_PeakZ"]].values + sel_aunps[["faTomo_gaussianFitX", "faTomo_gaussianFitY", "faTomo_gaussianFitZ"]].values
 
-    if len(az_data.tolist()['objects']) > 0:
+    if len(az_data.tolist()['objects']) > 0 and not skip_segment_activezone:
         presynaptic_glb =  Path("aunps") / "presynatpticmembranes.glb"
         postsynaptic_glb =  Path("aunps") / "postsynapticmembranes.glb"
         prems = pymeshlab.MeshSet()
