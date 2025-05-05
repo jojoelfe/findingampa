@@ -210,37 +210,15 @@ if  should_setup:
     bpy.context.evaluated_depsgraph_get().update()
     
    
-    membrain = Path("membrain") / f"{path.name[:-4]}_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
-    if membrain.exists():
-        membrain = mn.entities.density.ui.load(membrain.absolute(), invert=False,name="MemBrain")
-        bpy.data.node_groups["MN_density_MemBrain"].nodes["Style Density Surface"].inputs[1].default_value = 125
-        #bpy.ops.object.modifier_remove(modifier="MolecularNodes")
-        membrain.object.hide_set(True)
-        membranes_object = bpy.data.objects['Membranes']
-        membranes_object.modifiers[0]["Socket_2"] = membrain.object
-        bpy.context.evaluated_depsgraph_get().update()
-        membranes_object.update_tag()
-
-        bpy.context.view_layer.objects.active = membranes_object
-        bpy.ops.object.modifier_apply(modifier="GeometryNodes")
-        bpy.ops.object.mode_set(mode='EDIT')
-
-        bpy.ops.mesh.separate(type='LOOSE')
-        bpy.ops.object.mode_set(mode='OBJECT')
-        #DESELECT ALL
-        bpy.ops.object.select_all(action='DESELECT')
-        # Add ann_dens to Membrane object
-        # Apply mem modifier
-        # Split membranes
-
-        bpy.context.evaluated_depsgraph_get().update()
+    
 
     membrain = Path("membrain") / f"{path.name[:-8]}3DCTF_BIN4_ddw_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
     if not membrain.exists():
         membrain = Path("membrain") / f"{path.name[:-8]}3DCTF_BIN4_denoised_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
     if membrain.exists():
         membrain = mn.entities.density.ui.load(membrain.absolute(), invert=False,name="MemBrain")
-        bpy.data.node_groups["MN_density_MemBrain.001"].nodes["Style Density Surface"].inputs[1].default_value = 125
+        # Get nodegroup of geometry nodes modifier
+        membrain.object.modifiers[0].node_group.nodes["Style Density Surface"].inputs[1].default_value = 125
         #bpy.ops.object.modifier_remove(modifier="MolecularNodes")
         membrain.object.hide_set(True)
         membranes_object = bpy.data.objects['Membranes_denoised']

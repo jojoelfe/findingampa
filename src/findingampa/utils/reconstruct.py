@@ -60,7 +60,7 @@ def run_tilt(
         tilt_file: Path,
         angle_offset: float = 0.0,
         exclude_list: str = "",
-        SIRT_iterations: int = 0,
+        SIRT_iterations: int = 8,
         thickness: int = 1000,
         full_image: str = "3370 4746",
         final_pixelsize: float = 10.0,
@@ -74,7 +74,7 @@ THICKNESS {thickness}
 RADIAL 0.35 0.035
 FalloffIsTrueSigma 1
 XAXISTILT 0.0
-SCALE 0.0 0.066
+SCALE 0.0 250.0
 RotateBy90 
 MODE 2
 FULLIMAGE {full_image}

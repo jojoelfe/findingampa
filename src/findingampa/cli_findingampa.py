@@ -85,12 +85,21 @@ def create_tomograms():
         typer.echo("No rawtlt file found")
         raise typer.Exit()
     print(f" Creating tomograms for {tomo_name}")
-    exclude_list = get_exclude_list()
+    try:
+        exclude_list = get_exclude_list()
+    except FileNotFoundError:
+        exclude_list = []
     print(f"Excluding tilts {exclude_list}")
-    if get_align_angle_offset() > 0.0:
-        print("Align angle offset is not 0.0, please reset to 0.0 and recreate aligned stack and doseweight")
-        raise typer.Exit()
-    angle_offset = get_tomopitch_angle_offset()
+    try:
+        if get_align_angle_offset() > 0.0:
+            print("Align angle offset is not 0.0, please reset to 0.0 and recreate aligned stack and doseweight")
+            raise typer.Exit()
+    except FileNotFoundError:
+        pass
+    try:
+        angle_offset = get_tomopitch_angle_offset()
+    except FileNotFoundError:
+        angle_offset = 0.0
     full_image = get_full_image()
     #print(f"Creating WBP untilted tomogram {tomo_name}_full_rec_BP.mrc")
     #run_tilt(
