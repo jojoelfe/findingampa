@@ -16,7 +16,7 @@ while read -r tomo; do
     if [ -d "$dir" ]; then
         echo "Processing directory: $dir with ID: $ID"
         # Navigate to the directory and run the command
-        (cd "$dir" && finding_ampa write-dynamo-table --tomo-id "$ID" ampa_poses/ampa_pose_1.star )
+        (cd "$dir" && finding_ampa write-dynamo-table-v2 --tomo-id "$ID" ampa_poses/ampa_pose_1.star )
         # Increment the ID counter
         ID=$((ID + 1))
     else

@@ -159,6 +159,8 @@ def ddw():
         raise typer.Exit()
     from subprocess import Popen, PIPE
 
+    current_dir = Path.cwd()
+
     with mrcfile.open(f"{tomo_name}_full_rec_BP_3DCTF_BIN4_EVN.mrc", mode="r+") as f:
         dimensions = f.header["nx"], f.header["ny"], f.header["nz"]
     
@@ -170,9 +172,11 @@ def ddw():
         print("Tomogram is square, assuming Falcon")
         check_point_file = "20241101.ckpt"
     
-    Popen(f"scp *BIN4_EVN.mrc *BIN4_ODD.mrc exahead1:/home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/", shell=True).wait()
-    Popen(f"ssh exahead1 srun -p gouaux --mem 32G --time 5:00:00 -c 10 --gres gpu:a40:1 /home/exacloud/gscratch/gouaux/CJS/deepdewedge/ddw_env/bin/ddw refine-tomogram --tomo0-files /home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/{tomo_name}_full_rec_BP_3DCTF_BIN4_EVN.mrc  --tomo1-files /home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/{tomo_name}_full_rec_BP_3DCTF_BIN4_ODD.mrc --subtomo-size 96 --mw-angle 84 --subtomo-overlap 32 --batch-size 5 --model-checkpoint-file /home/exacloud/gscratch/gouaux/CJS/deepdewedge/checkpoints/{check_point_file} --output-dir /home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/ --num-workers 10 --gpu 0", shell=True).wait()
-    Popen(f"scp exahead1:/home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/{tomo_name}*_refined.mrc {tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc", shell=True).wait()
+    #Popen(f"scp *BIN4_EVN.mrc *BIN4_ODD.mrc exahead1:/home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/", shell=True).wait()
+    Popen(f"ssh 10.137.46.10  /juliet/scratch/andecath/DeepDeWedge/env/bin/ddw refine-tomogram --tomo0-files {current_dir}/{tomo_name}_full_rec_BP_3DCTF_BIN4_EVN.mrc  --tomo1-files {current_dir}/{tomo_name}_full_rec_BP_3DCTF_BIN4_ODD.mrc --subtomo-size 96 --mw-angle 84 --subtomo-overlap 32 --batch-size 5 --model-checkpoint-file /juliet/scratch/andecath/ddw_checkpoints/{check_point_file} --output-dir ./ --num-workers 10 --gpu 0", shell=True).wait()
+    #Rename file
+    Popen(f"mv {tomo_name}*_refined.mrc {tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc", shell=True).wait()
+    #Popen(f"scp exahead1:/home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/{tomo_name}*_refined.mrc {tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc", shell=True).wait()
 
 @app.command()
 def ddw_aretomo(
@@ -585,6 +589,46 @@ def write_dynamo_table(
 
     dynamo_data = pd.DataFrame(dynamo_dicts)
     dynamotable.write(dynamo_data, Path(ampa_pose_file).with_suffix(".tbl"))
+
+@app.command()
+def write_dynamo_table_v2(
+    ampa_pose_file: str,
+    tomo_id: int = 1
+):
+    import dynamotable
+    import starfile
+    from scipy.spatial.transform.rotation import Rotation as R
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    rlnTomoImportParticleFile = ampa_pose_file
+    relion_data = starfile.read(rlnTomoImportParticleFile)['particles']
+    eulers = R.from_euler(seq="ZYZ", angles=relion_data[["rlnAngleRot","rlnAngleTilt","rlnAnglePsi"]].values, degrees=True)
+    angles_dynamo = eulers.inv().as_euler("zxz", degrees=True)
+    dynamo_dicts = [
+        {
+            "x": x["rlnCoordinateX"],
+            "y": x["rlnCoordinateY"],
+            "z": x["rlnCoordinateZ"],
+            "tag": i+1 + 1000 * tomo_id ,
+            "tdrot": angles_dynamo[i, 0],
+            "tilt": angles_dynamo[i, 1],
+            "narot": angles_dynamo[i, 2],
+            "tomo": tomo_id,
+            "ymintilt": -48,
+            "ymaxtilt": 48,
+            "ftype": 1,
+            "aligned_value": 1,
+            "averaged_value": 1,
+
+        } for i, x in relion_data.iterrows()
+    ]
+
+    dynamo_data = pd.DataFrame(dynamo_dicts)
+    dynamotable.write(dynamo_data, str(Path(ampa_pose_file))[:-5] + "_v2.tbl")
+
 
 @app.command()
 def dynamo_table_to_relion4_star(
