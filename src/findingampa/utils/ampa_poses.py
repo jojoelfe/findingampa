@@ -88,7 +88,7 @@ def estimate_ampa_poses(
         vector_norm = vector_center / np.linalg.norm(vector_center)
 
         # 60 is fudge factor to line out TMP with membrane
-        cp = cp + vector_norm * 6
+        center = cp + vector_norm * 6
         # Get thre rotation betwen vector and [0,0,1] as a 3D eulerangle
 
         rot, _ = R.align_vectors([[-0.5, 0, 1],[0.5,0,1]], [vector_aunp1,vector_aunp2])
@@ -98,13 +98,16 @@ def estimate_ampa_poses(
         
         results_relion.append({
             "rlnTomoName": tomo_name,
-            "rlnCoordinateX": cp[0],
-            "rlnCoordinateY": cp[1],
-            "rlnCoordinateZ": cp[2],
+            "rlnCoordinateX": center[0],
+            "rlnCoordinateY": center[1],
+            "rlnCoordinateZ": center[2],
 
             "rlnAngleRot": eulers[0],
             "rlnAngleTilt": eulers[1],
             "rlnAnglePsi": eulers[2],
+
+            "faAuNPSeperation" : np.linalg.norm(aunp_coordinates[int(pair[0])] - aunp_coordinates[int(pair[1])]),
+            "faAuNPMembraneDistance": np.linalg.norm(vector_center),
             # "rlnImagePixelSize": ctx.obj.relion_tomograms[tomogram.FATomogramName].rlnTomoTiltSeriesPixelSize,
             # "rlnMicrographName": "micrograph.mrc",
             # "rlnOpticsGroup": 1,

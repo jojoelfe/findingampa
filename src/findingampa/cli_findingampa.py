@@ -170,10 +170,10 @@ def ddw():
         check_point_file = "ddw_k3.ckpt"
     else:
         print("Tomogram is square, assuming Falcon")
-        check_point_file = "20241101.ckpt"
+        check_point_file = "ddw_20241028_epoch=999-val_loss=0.18333.ckpt"
     
     #Popen(f"scp *BIN4_EVN.mrc *BIN4_ODD.mrc exahead1:/home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/", shell=True).wait()
-    Popen(f"ssh 10.137.46.10  /juliet/scratch/andecath/DeepDeWedge/env/bin/ddw refine-tomogram --tomo0-files {current_dir}/{tomo_name}_full_rec_BP_3DCTF_BIN4_EVN.mrc  --tomo1-files {current_dir}/{tomo_name}_full_rec_BP_3DCTF_BIN4_ODD.mrc --subtomo-size 96 --mw-angle 84 --subtomo-overlap 32 --batch-size 5 --model-checkpoint-file /juliet/scratch/andecath/ddw_checkpoints/{check_point_file} --output-dir ./ --num-workers 10 --gpu 0", shell=True).wait()
+    Popen(f"ssh 10.137.46.10  /juliet/scratch/andecath/DeepDeWedge/env/bin/ddw refine-tomogram --tomo0-files {current_dir}/{tomo_name}_full_rec_BP_3DCTF_BIN4_EVN.mrc  --tomo1-files {current_dir}/{tomo_name}_full_rec_BP_3DCTF_BIN4_ODD.mrc --subtomo-size 96 --mw-angle 84 --subtomo-overlap 32 --batch-size 5 --model-checkpoint-file /juliet/scratch/andecath/ddw_checkpoints/{check_point_file} --output-dir {current_dir} --num-workers 10 --gpu 0", shell=True).wait()
     #Rename file
     Popen(f"mv {tomo_name}*_refined.mrc {tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc", shell=True).wait()
     #Popen(f"scp exahead1:/home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/{tomo_name}*_refined.mrc {tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc", shell=True).wait()
