@@ -148,9 +148,22 @@ def create_tomograms():
                               flatten=True, 
                               tilt_parent=tilt_parent)
     denoised = apply_cryocare(tomo_name)
-    
+
+from enum import Enum
+
+class DDWModels(str, Enum):
+    k3 = "k3"
+    falcon = "falcon"
+    falconczi = "falconczi"
+
+ddw_models = {
+    "k3": "ddw_k3.ckpt",
+    "falcon": "epoch=359-val_loss=0.21163.ckpt",
+    "falconczi": "epoch=499_CZIIFalcon4-MC-eTomo.ckpt"
+}
+
 @app.command()
-def ddw():
+def ddw(model: DDWModels):
     import mrcfile
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
@@ -161,16 +174,7 @@ def ddw():
 
     current_dir = Path.cwd()
 
-    with mrcfile.open(f"{tomo_name}_full_rec_BP_3DCTF_BIN4_EVN.mrc", mode="r+") as f:
-        dimensions = f.header["nx"], f.header["ny"], f.header["nz"]
-    
-    ratio = dimensions[0]/dimensions[1]
-    if abs(ratio - 1) > 0.1:
-        print("Tomogram is not square, assuming K3")
-        check_point_file = "ddw_k3.ckpt"
-    else:
-        print("Tomogram is square, assuming Falcon")
-        check_point_file = "ddw_20241028_epoch=999-val_loss=0.18333.ckpt"
+    check_point_file = ddw_models[model]
     
     #Popen(f"scp *BIN4_EVN.mrc *BIN4_ODD.mrc exahead1:/home/exacloud/gscratch/gouaux/CJS/deepdewedge/data/", shell=True).wait()
     Popen(f"ssh 10.137.46.10  /juliet/scratch/andecath/DeepDeWedge/env/bin/ddw refine-tomogram --tomo0-files {current_dir}/{tomo_name}_full_rec_BP_3DCTF_BIN4_EVN.mrc  --tomo1-files {current_dir}/{tomo_name}_full_rec_BP_3DCTF_BIN4_ODD.mrc --subtomo-size 96 --mw-angle 84 --subtomo-overlap 32 --batch-size 5 --model-checkpoint-file /juliet/scratch/andecath/ddw_checkpoints/{check_point_file} --output-dir {current_dir} --num-workers 10 --gpu 0", shell=True).wait()
