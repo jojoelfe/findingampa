@@ -135,7 +135,7 @@ class Save(Operator):
     bl_label = "Save annotations"
 
     def execute(self, context):
-        save_membrane("Presynatptic Membranes")
+        save_membrane("Presynaptic Membranes")
         save_membrane("Postsynaptic Membranes")
         save_membrane("Synaptic Vesicles")
         save_aunps()

@@ -88,7 +88,10 @@ def generate_active_zonograms(tomogram_name, active_zone = None):
 
     with mrcfile.open(f"{tomogram_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc") as mrc:
         tomogram_data_ddw = torch.tensor(mrc.data.copy())
-    active_zones = get_active_zone_points( Path("aunps") / "presynatpticmembranes.glb", Path("aunps") / "postsynapticmembranes.glb",active_zone=active_zone)
+    try:
+        active_zones = get_active_zone_points( Path("aunps") / "presynapticmembranes.glb", Path("aunps") / "postsynapticmembranes.glb",active_zone=active_zone)
+    except Exception as e:
+        active_zones = get_active_zone_points( Path("aunps") / "presynatpticmembranes.glb", Path("aunps") / "postsynapticmembranes.glb",active_zone=active_zone)
     return_data = []
     for i, az in enumerate(active_zones):
         pre_points, post_points, paz = az
@@ -408,19 +411,52 @@ def select_aunps(aunp_data, az_data, res_ddw, threshold = 3.8, skip_segment_acti
 
     selected_aunp_pos = sel_aunps[["faTM_PeakX", "faTM_PeakY", "faTM_PeakZ"]].values + sel_aunps[["faTomo_gaussianFitX", "faTomo_gaussianFitY", "faTomo_gaussianFitZ"]].values
 
-    if len(az_data.tolist()['objects']) > 0 and not skip_segment_activezone:
-        presynaptic_glb =  Path("aunps") / "presynatpticmembranes.glb"
+    if not skip_segment_activezone:
+        presynaptic_glb =  Path("aunps") / "presynapticmembranes.glb"
+        if not presynaptic_glb.exists():
+            presynaptic_glb =  Path("aunps") / "presynatpticmembranes.glb"
         postsynaptic_glb =  Path("aunps") / "postsynapticmembranes.glb"
         prems = pymeshlab.MeshSet()
         prems.load_new_mesh(str(presynaptic_glb))
         postms = pymeshlab.MeshSet()
         postms.load_new_mesh(str(postsynaptic_glb))
 
-        prems.set_current_mesh(az_data.tolist()['objects'][0])
+        if len(az_data.tolist()['objects']) == 0:
+            # Find segmentations closest to the active zone
+            # Iterate over all meshes and find the closest one
+            closest_pre = None
+            closest_post = None
+            closest_pre_distance = float('inf')
+            closest_post_distance = float('inf')
+            for i in range(prems.mesh_number()):
+                prems.set_current_mesh(i)
+                prem = prems.current_mesh()
+                pre_points = prem.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+                pre_tree = cKDTree(pre_points)
+                dis, idx = pre_tree.query(az_data.tolist()["center"])
+                if np.min(dis) < closest_pre_distance:
+                    closest_pre_distance = np.min(dis)
+                    closest_pre = i
+            for i in range(postms.mesh_number()):
+                postms.set_current_mesh(i)
+                postm = postms.current_mesh()
+                post_points = postm.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+                post_tree = cKDTree(post_points)
+                dis, idx = post_tree.query(az_data.tolist()["center"])
+                if np.min(dis) < closest_post_distance:
+                    closest_post_distance = np.min(dis)
+                    closest_post = i
+            print(f"Manual AZ: Closest pre-synaptic membrane: {closest_pre}, closest post-synaptic membrane: {closest_post}")
+
+        else:
+            closest_pre = az_data.tolist()['objects'][0]
+            closest_post = az_data.tolist()['objects'][1]
+
+        prems.set_current_mesh(closest_pre)
         prem = prems.current_mesh()
         pre_points = prem.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
         pre_normals = prem.vertex_normal_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
-        postms.set_current_mesh(az_data.tolist()['objects'][1])
+        postms.set_current_mesh(closest_post)
         postm = postms.current_mesh()
         post_points = postm.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
         post_normals = postm.vertex_normal_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])

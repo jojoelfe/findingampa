@@ -13,7 +13,7 @@ while read -r tomo; do
     if [ -d "$dir" ]; then
         echo "Processing directory: $dir"
         # Navigate to the directory and run the command
-        (cd "$dir" && finding_ampa create-relion-starfile ampa_pose_1)
+        (cd "$dir" && finding_ampa create-relion-starfile ampa_pose_2 --aunp-distance-cutoffs-a 30 150 --membrane-distance-cutoffs-a 100 300)
     else
         echo "Directory does not exist: $dir"
     fi
