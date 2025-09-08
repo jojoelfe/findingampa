@@ -1046,6 +1046,120 @@ def create_relion_starfile(
     )
     
     
+@app.command()
+def manual_monomer_dimer(
+    name: str 
+):
+    import os
+    from findingampa.utils.assets import FA_ASSETS
+    try:
+        tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
+    except IndexError:
+        typer.echo("No rawtlt file found")
+        raise typer.Exit()
+    
+    import napari
+    import numpy as np
+    from napari.utils.geometry import clamp_point_to_bounding_box
+    import starfile
+    # Open ddw file in napari
+    viewer = napari.Viewer()
+    tomo_layer = viewer.open(f"{tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc",plugin='napari-mrcfile-reader')[0]
+    # Set viewer to 3d
+    viewer.dims.ndisplay = 3
+    # Set mode to minip
+    viewer.layers[0].rendering = 'minip'
 
+    points_data_file = Path.cwd() / f"fa_manual_picking_{name}.star"
 
     
+
+    # Open a points layer
+    monomer_layer = viewer.add_points(name="Monomers", ndim=3,face_color='transparent',edge_color='red',size=5)
+    monomer_layer.blending = 'translucent_no_depth'
+    dimer_layer = viewer.add_points(name="Dimers", ndim=3,face_color='transparent',edge_color='blue',size=5)
+    dimer_layer.blending = 'translucent_no_depth'
+    if points_data_file.exists():
+        points_data = starfile.read(points_data_file)
+        monomer_data = points_data[points_data['type'] == 'monomer'][['faCoordinateX','faCoordinateY','faCoordinateZ']].values
+        dimer_data = points_data[points_data['type'] == 'dimer'][['faCoordinateX','faCoordinateY','faCoordinateZ']].values
+        monomer_layer.add(monomer_data)
+        dimer_layer.add(dimer_data)
+    m = False
+    d = False
+
+    @viewer.bind_key('m')
+    def toggle_monomer(event):
+        nonlocal m
+        m = True
+        yield
+        m = False
+
+    @viewer.bind_key('d')
+    def toggle_dimer(event):
+        nonlocal d
+        d = True
+        yield
+        d = False
+
+    # Add mouse event
+    @viewer.mouse_drag_callbacks.append
+    def add_point(viewer, event):
+        nonlocal m, d
+        if not (m or d):
+            return
+        
+        start_point, end_point = tomo_layer.get_ray_intersections(
+            position=event.position,
+            view_direction=event.view_direction,
+            dims_displayed=event.dims_displayed,
+            world=True
+        )
+        sample_ray = end_point - start_point
+        length_sample_vector = np.linalg.norm(sample_ray)
+        n_points = int(2 * length_sample_vector)
+        sample_points = np.linspace(
+            start_point, end_point, n_points, endpoint=True
+        )
+        im_slice = tomo_layer._slice.image.raw
+        print(f"Adding monomer at {event.position}, closest point is {start_point}, end point is {end_point}")
+        bounding_box = tomo_layer._display_bounding_box_at_level(
+            viewer.dims.displayed, tomo_layer.data_level
+        )
+        # the display bounding box is returned as a closed interval
+        # (i.e. the endpoint is included) by the method, but we need
+        # open intervals in the code that follows, so we add 1.
+        bounding_box[:, 1] += 1
+
+        clamped = clamp_point_to_bounding_box(
+            sample_points,
+            bounding_box,
+        ).astype(int)
+        values = im_slice[tuple(clamped.T)]
+        min_index = np.argmin(values)
+        event_position = clamped[min_index]
+        if m:
+            monomer_layer.add([event_position])
+            monomer_layer.selected_data = {}
+        elif d:
+            dimer_layer.add([event_position])
+            dimer_layer.selected_data = {}
+    # Add button to save points
+
+    def save_points():
+        monomer_data = monomer_layer.data
+        dimer_data = dimer_layer.data
+        if len(monomer_data) == 0 and len(dimer_data) == 0:
+            print("No points to save")
+            return
+        monomer_df = pd.DataFrame(monomer_data, columns=["faCoordinateX","faCoordinateY","faCoordinateZ"])
+        monomer_df['type'] = 'monomer'
+        dimer_df = pd.DataFrame(dimer_data, columns=["faCoordinateX","faCoordinateY","faCoordinateZ"])
+        dimer_df['type'] = 'dimer'
+        all_df = pd.concat([monomer_df, dimer_df], ignore_index=True)
+        starfile.write(all_df, points_data_file)
+        print(f"Saved {len(monomer_data)} monomers and {len(dimer_data)} dimers to {points_data_file}")
+    
+    viewer.window.add_function_widget(save_points, name="Save picks")
+
+    napari.run()
