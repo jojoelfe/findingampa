@@ -500,6 +500,136 @@ def select_aunps(aunp_data, az_data, res_ddw, threshold = 3.8, skip_segment_acti
     return fig, significant_picks_mask, selected_aunp_pos, selected_aunp_pos_mask, selected_aunp_pos_postsyn_mask
     #plt.show()
 
+def select_aunps_update(aunp_data, az_data, res_ddw, threshold = 3.8, skip_segment_activezone = False):
+    from findingampa.utils.analysis import render_active_zonograms
+    import pymeshlab
+    from pathlib import Path
+    from scipy.spatial import cKDTree
+    import json
+
+
+    try:
+        data = json.loads(Path("fa_manual_override.json").read_text())
+    except FileNotFoundError:
+        data = {}
+    if "aunp_thresholds" in data:
+        print("Using manual thresholds")
+        significant_picks_mask = np.logical_and(
+            aunp_data["faTomo_gaussianFitAmplitude"] < data["aunp_thresholds"]["amplitude"],
+            aunp_data["faTomo_gaussianFitSigmaX"] < data["aunp_thresholds"]["sigmax"],
+            aunp_data["faTM_PeakScore"] > data["aunp_thresholds"]["score"]
+        )
+        if "plane1_elimination" in data["aunp_thresholds"] and data["aunp_thresholds"]["plane1_elimination"]:
+            significant_picks_mask = np.logical_and(significant_picks_mask, aunp_data["faTomo_Surface1"] > data["aunp_thresholds"]["plane1_distance_cutoff"])
+        if "plane2_elimination" in data["aunp_thresholds"] and data["aunp_thresholds"]["plane2_elimination"]:
+            significant_picks_mask = np.logical_and(significant_picks_mask, aunp_data["faTomo_Surface2"] > data["aunp_thresholds"]["plane2_distance_cutoff"])
+    else:
+        amp_rank, amp_pro = calculate_probit(aunp_data["faTomo_gaussianFitAmplitude"].to_numpy()* -1)
+        pea_rank, pea_pro = calculate_probit(aunp_data["faTM_PeakScore"].to_numpy())
+
+        Dinv_, Uinv__ = estimate_anisotropic_gaussian_for_probit(amp_pro, pea_pro, None, False, False)
+        pval,neg_log_p1q_equ_pro_ = calculate_1q_p_value(amp_pro, pea_pro, Dinv_, Uinv__)
+        significant_picks_mask = neg_log_p1q_equ_pro_ > threshold
+        
+
+
+    fig = render_active_zonograms((None,None,res_ddw))
+
+
+    
+    sel_aunps = aunp_data[significant_picks_mask]
+
+    selected_aunp_pos = sel_aunps[["faCoordinateX", "faCoordinateY", "faCoordinateZ"]].values 
+
+    if not skip_segment_activezone:
+        presynaptic_glb =  Path("aunps") / "presynapticmembranes.glb"
+        if not presynaptic_glb.exists():
+            presynaptic_glb =  Path("aunps") / "presynatpticmembranes.glb"
+        postsynaptic_glb =  Path("aunps") / "postsynapticmembranes.glb"
+        prems = pymeshlab.MeshSet()
+        prems.load_new_mesh(str(presynaptic_glb))
+        postms = pymeshlab.MeshSet()
+        postms.load_new_mesh(str(postsynaptic_glb))
+
+        if len(az_data.tolist()['objects']) == 0:
+            # Find segmentations closest to the active zone
+            # Iterate over all meshes and find the closest one
+            closest_pre = None
+            closest_post = None
+            closest_pre_distance = float('inf')
+            closest_post_distance = float('inf')
+            for i in range(prems.mesh_number()):
+                prems.set_current_mesh(i)
+                prem = prems.current_mesh()
+                pre_points = prem.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+                pre_tree = cKDTree(pre_points)
+                dis, idx = pre_tree.query(az_data.tolist()["center"])
+                if np.min(dis) < closest_pre_distance:
+                    closest_pre_distance = np.min(dis)
+                    closest_pre = i
+            for i in range(postms.mesh_number()):
+                postms.set_current_mesh(i)
+                postm = postms.current_mesh()
+                post_points = postm.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+                post_tree = cKDTree(post_points)
+                dis, idx = post_tree.query(az_data.tolist()["center"])
+                if np.min(dis) < closest_post_distance:
+                    closest_post_distance = np.min(dis)
+                    closest_post = i
+            print(f"Manual AZ: Closest pre-synaptic membrane: {closest_pre}, closest post-synaptic membrane: {closest_post}")
+
+        else:
+            closest_pre = az_data.tolist()['objects'][0]
+            closest_post = az_data.tolist()['objects'][1]
+
+        prems.set_current_mesh(closest_pre)
+        prem = prems.current_mesh()
+        pre_points = prem.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+        pre_normals = prem.vertex_normal_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+        postms.set_current_mesh(closest_post)
+        postm = postms.current_mesh()
+        post_points = postm.vertex_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+        post_normals = postm.vertex_normal_matrix().copy()[:,[0,2,1]][::40] * np.array([10,-10,10])
+        pre_tree = cKDTree(pre_points)
+        post_tree = cKDTree(post_points)
+
+
+
+        pre_dis, pre_idx = pre_tree.query(selected_aunp_pos)
+        post_dis, post_idx = post_tree.query(selected_aunp_pos)
+
+        selected_aunp_pos_mask = np.logical_and(pre_dis < 40, post_dis < 40)
+        selected_aunp_pos_postsyn_mask = np.logical_and(post_dis < 40, np.logical_not(selected_aunp_pos_mask))
+    else:
+        selected_aunp_pos_mask = np.ones(selected_aunp_pos.shape[0], dtype=bool)
+        selected_aunp_pos_postsyn_mask = np.zeros(selected_aunp_pos.shape[0], dtype=bool)
+    #selected_aunp_pos_postsyn_mask = np.logical_and(selected_aunp_pos_postsyn_mask,
+    # For this to work whe have to select the outer leaflet of the postsynaptic membrane
+    #dot_mask = np.einsum('ij,ij->i', post_normals[post_idx], selected_aunp_pos-post_points[post_idx]) > 0
+    #print(np.sum(dot_mask),len(dot_mask))
+    selected_aunp_pos_masked = selected_aunp_pos[selected_aunp_pos_mask]
+    selected_aunp_pos_post = selected_aunp_pos[selected_aunp_pos_postsyn_mask]
+    selected_aunp_pos_transformed = (selected_aunp_pos_masked - az_data.tolist()["center"]) @ az_data.tolist()["cs"].T
+    selected_aunp_pos_post_transformed = (selected_aunp_pos_post - az_data.tolist()["center"]) @ az_data.tolist()["cs"].T  
+    selected_aunp_pos_transformed += np.floor(np.array(res_ddw.shape)[[2,1,0]]/2)
+    selected_aunp_pos_post_transformed += np.floor(np.array(res_ddw.shape)[[2,1,0]]/2)
+    # Make sure the points are within the volume (remove them if not)
+    selected_aunp_pos_transformed = selected_aunp_pos_transformed[np.all(selected_aunp_pos_transformed > 0, axis=1)]
+    selected_aunp_pos_transformed = selected_aunp_pos_transformed[np.all(selected_aunp_pos_transformed < np.array(res_ddw.shape)[[2,1,0]], axis=1)]
+    selected_aunp_pos_post_transformed = selected_aunp_pos_post_transformed[np.all(selected_aunp_pos_post_transformed > 0, axis=1)]
+    selected_aunp_pos_post_transformed = selected_aunp_pos_post_transformed[np.all(selected_aunp_pos_post_transformed < np.array(res_ddw.shape)[[2,1,0]], axis=1)]
+
+    # Get subplot from fig
+    (axxy, axxz, axyz) = fig.get_axes()
+    axxy.scatter(selected_aunp_pos_transformed[:,0], selected_aunp_pos_transformed[:,1], s=1,c='r')
+    axxy.scatter(selected_aunp_pos_post_transformed[:,0], selected_aunp_pos_post_transformed[:,1], s=1,c='g')
+    axxz.scatter(selected_aunp_pos_transformed[:,2], selected_aunp_pos_transformed[:,1], s=1,c='r')
+    axxz.scatter(selected_aunp_pos_post_transformed[:,2], selected_aunp_pos_post_transformed[:,1], s=1,c='g')
+    axyz.scatter(selected_aunp_pos_transformed[:,0], selected_aunp_pos_transformed[:,2], s=1,c='r')
+    axyz.scatter(selected_aunp_pos_post_transformed[:,0], selected_aunp_pos_post_transformed[:,2], s=1,c='g')
+    return fig, significant_picks_mask, selected_aunp_pos, selected_aunp_pos_mask, selected_aunp_pos_postsyn_mask
+    #plt.show()
+
 
 
 

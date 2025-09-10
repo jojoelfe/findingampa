@@ -124,6 +124,45 @@ def fit_gaussian_3d_list(score_volume, locations, boxsize, sign=1):
 
     return fitted_params
 
+def refine_aunp_peaks(star_data):
+    from pathlib import Path
+    import mrcfile
+    from torch_find_peaks.refine_peaks import refine_peaks_3d
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    mrcs = list(Path.cwd().glob(f'*BP_3DCTF_BIN4.mrc'))
+    print(f"Reading tomo from {mrcs[0]}")
+
+    with mrcfile.open(mrcs[0], 'r') as mrc:
+        tomo_data = torch.tensor(mrc.data).to("cuda:0")
+    peak_data = torch.tensor(star_data[['faTM_PeakZ', 'faTM_PeakY', 'faTM_PeakX']].values,dtype=torch.float32).to("cuda:0")
+    refined_peak_data = refine_peaks_3d(
+        volume = -1. * tomo_data,
+        peak_coords= peak_data,
+        return_as="diagnostic",
+        boxsize=6,
+        learning_rate=0.001,
+        center_regularization=0.001,
+        amplitude_consistency= 0.000000,
+        sigma_consistency= 0.000000,
+        background_consistency=0.000000,
+        max_iterations=1000
+    )
+    rdp = refined_peak_data['refined_peaks']
+    star_data['faCoordinateX'] = rdp['x']
+    star_data['faCoordinateY'] = rdp['y']
+    star_data['faCoordinateZ'] = rdp['z']
+    star_data['faTomo_gaussianFitAmplitude'] = -rdp['amplitude']
+    star_data['faTomo_gaussianFitSigmaX'] = rdp['sigma_x']
+    star_data['faTomo_gaussianFitSigmaY'] = rdp['sigma_y']
+    star_data['faTomo_gaussianFitSigmaZ'] = rdp['sigma_z']
+    star_data['faTomo_gaussianFitLoss'] = rdp['loss']
+    star_data['faTomo_gaussianFitBackground'] = -rdp['background']
+    star_data['faTomo_gaussianFitX'] = star_data['faTM_PeakX'] - rdp['x']
+    star_data['faTomo_gaussianFitY'] = star_data['faTM_PeakY'] - rdp['y']
+    star_data['faTomo_gaussianFitZ'] = star_data['faTM_PeakZ'] - rdp['z']
+
+    return star_data
 
 
 def test_3d_cc_fft(vol,r):

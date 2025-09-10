@@ -211,7 +211,9 @@ if  should_setup:
     
    
     membrain = Path("membrain") / f"{path.name[:-4]}_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
+    flat_exists = False
     if membrain.exists():
+        flat_exists = True
         membrain = mn.entities.density.ui.load(membrain.absolute(), invert=False,name="MemBrain")
         bpy.data.node_groups["MN_density_MemBrain"].nodes["Style Density Surface"].inputs[1].default_value = 125
         #bpy.ops.object.modifier_remove(modifier="MolecularNodes")
@@ -240,7 +242,8 @@ if  should_setup:
         membrain = Path("membrain") / f"{path.name[:-8]}3DCTF_BIN4_denoised_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
     if membrain.exists():
         membrain = mn.entities.density.ui.load(membrain.absolute(), invert=False,name="MemBrain")
-        bpy.data.node_groups["MN_density_MemBrain.001"].nodes["Style Density Surface"].inputs[1].default_value = 125
+        membrain_ident = "MN_density_MemBrain.001" if flat_exists else "MN_density_MemBrain"
+        bpy.data.node_groups[membrain_ident].nodes["Style Density Surface"].inputs[1].default_value = 125
         #bpy.ops.object.modifier_remove(modifier="MolecularNodes")
         membrain.object.hide_set(True)
         membranes_object = bpy.data.objects['Membranes_denoised']

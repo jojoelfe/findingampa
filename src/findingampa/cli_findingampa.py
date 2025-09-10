@@ -259,15 +259,15 @@ def annotate_membranes():
     membrain_output_path = Path("membrain" )
     membrain_output_path.mkdir(parents=True, exist_ok=True)
     
-    segmentation_file = segment(
-        tomogram_path=f"{tomo_name}_full_rec_BP_flat.mrc",
-        ckpt_path=MEMBRAIN_MODEL_PATH,
-        out_folder=membrain_output_path,
-        segmentation_threshold=0.0,
-        store_probabilities=True
-    )
-    print(f"Segmentation saved to {segmentation_file}")
-    smooth_membranes(segmentation_file)
+    #segmentation_file = segment(
+    #    tomogram_path=f"{tomo_name}_full_rec_BP_flat.mrc",
+    #    ckpt_path=MEMBRAIN_MODEL_PATH,
+    #    out_folder=membrain_output_path,
+    #    segmentation_threshold=0.0,
+    #    store_probabilities=True
+    #)
+    #print(f"Segmentation saved to {segmentation_file}")
+    #smooth_membranes(segmentation_file)
     ddw = Path(f"{tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc")
     if ddw.exists():
         with mrcfile.open(ddw, mode="r+") as f:
@@ -928,15 +928,21 @@ def select_aunp_picks(
     import numpy as np
     from imodmodel import ImodModel
     from imodmodel.models import Object
-    from findingampa.utils.analysis import select_aunps
+    from findingampa.utils.analysis import select_aunps_update
+    from findingampa.utils.tm3d import refine_aunp_peaks
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
     except IndexError:
         typer.echo("No rawtlt file found")
         raise typer.Exit()
 
+    aunpfilename_filename = Path("aunps") / f"aunp_tm_{tomotype.value}{'_HP' + str(high_pass) if high_pass is not None else ''}.star"
+    aunp_data = starfile.read(aunpfilename_filename)
+    aunp_data = refine_aunp_peaks(aunp_data)
+
     azs = Path("active_zonograms").glob("active_zonogram_*.mrc")
     azs = list(azs)
+    
     print(f"Selecting AuNPS in {len(azs)} active zones")
     az_picks = []
     postsyn_picks = []
@@ -945,9 +951,8 @@ def select_aunp_picks(
             res_ddw = torch.tensor(mrc.data.copy())
         az_data = np.load(az.with_suffix(".npy") ,allow_pickle=True)
         az_id = str(az.with_suffix("")).split("_")[-1]
-        aunpfilename_filename = Path("aunps") / f"aunp_tm_{tomotype.value}{'_HP' + str(high_pass) if high_pass is not None else ''}.star"
-        aunp_data = starfile.read(aunpfilename_filename)
-        fig, significant_picks_mask, selected_aunp_pos, selected_aunp_pos_mask, selected_aunp_pos_postsyn_mask = select_aunps(aunp_data, az_data, res_ddw, threshold, skip_segment_activezone)
+        
+        fig, significant_picks_mask, selected_aunp_pos, selected_aunp_pos_mask, selected_aunp_pos_postsyn_mask = select_aunps_update(aunp_data, az_data, res_ddw, threshold, skip_segment_activezone)
         diagnost_figure_filename = str(az.with_suffix(""))+"_selected_aunps.png"
         fig.savefig(diagnost_figure_filename)
         print(f"Saved diagnostic image {diagnost_figure_filename}")

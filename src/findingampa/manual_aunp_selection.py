@@ -2,6 +2,7 @@ import streamlit as st
 
 import starfile
 from findingampa.utils.analysis import render_active_zonograms, calculate_probit, estimate_anisotropic_gaussian_for_probit, calculate_1q_p_value, render_active_zonograms, select_aunps
+from findingampa.utils.tm3d import refine_aunp_peaks
 import pymeshlab
 from pathlib import Path
 from scipy.spatial import cKDTree
@@ -18,6 +19,7 @@ except IndexError:
     raise typer.Exit()
 
 aunp_data = starfile.read(f"aunps/aunp_tm_BP.star")
+#aunp_data = refine_aunp_peaks(aunp_data)
 
 try:
     data = json.loads(Path("fa_manual_override.json").read_text())
