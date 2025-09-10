@@ -1069,11 +1069,14 @@ def manual_monomer_dimer(
     import starfile
     # Open ddw file in napari
     viewer = napari.Viewer()
-    tomo_layer = viewer.open(f"{tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc",plugin='napari-mrcfile-reader')[0]
+    bin4_layer = viewer.open(f"{tomo_name}_full_rec_BP_3DCTF_BIN4.mrc",plugin='napari-mrcfile-reader',name="BIN4")[0]
+    ddw_layer = viewer.open(f"{tomo_name}_full_rec_BP_3DCTF_BIN4_ddw.mrc",plugin='napari-mrcfile-reader',name="DDW")[0]
+
     # Set viewer to 3d
     viewer.dims.ndisplay = 3
     # Set mode to minip
-    viewer.layers[0].rendering = 'minip'
+    bin4_layer.rendering = 'minip'
+    ddw_layer.rendering = 'minip'
 
     points_data_file = Path.cwd() / f"fa_manual_picking_{name}.star"
 
@@ -1113,8 +1116,16 @@ def manual_monomer_dimer(
         nonlocal m, d
         if not (m or d):
             return
-        
-        start_point, end_point = tomo_layer.get_ray_intersections(
+
+        # Check if either ddw_layer of bin4_layer are selected
+        if viewer.layers.selection.active is bin4_layer:
+            print("Picking in Bin4")
+            active_layer = bin4_layer
+        else:
+            print("Picking in DDW")
+            active_layer = ddw_layer
+
+        start_point, end_point = active_layer.get_ray_intersections(
             position=event.position,
             view_direction=event.view_direction,
             dims_displayed=event.dims_displayed,
@@ -1126,10 +1137,10 @@ def manual_monomer_dimer(
         sample_points = np.linspace(
             start_point, end_point, n_points, endpoint=True
         )
-        im_slice = tomo_layer._slice.image.raw
+        im_slice = active_layer._slice.image.raw
         print(f"Adding monomer at {event.position}, closest point is {start_point}, end point is {end_point}")
-        bounding_box = tomo_layer._display_bounding_box_at_level(
-            viewer.dims.displayed, tomo_layer.data_level
+        bounding_box = active_layer._display_bounding_box_at_level(
+            viewer.dims.displayed, active_layer.data_level
         )
         # the display bounding box is returned as a closed interval
         # (i.e. the endpoint is included) by the method, but we need
