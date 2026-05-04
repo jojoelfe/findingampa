@@ -1004,6 +1004,40 @@ def select_aunp_picks(
     starfile.write(data_structure, filename)
     print(f"Saved picks to {filename}")
 
+@app.command("update-manual-aunp-picks")
+def update_manual_aunp_picks(
+    skip_segment_activezone: bool = False
+):
+    import torch
+    import mrcfile
+    import numpy as np
+    from findingampa.utils.analysis import overlay_manual_aunps_update
+
+    azs = Path("active_zonograms").glob("active_zonogram_*.mrc")
+    azs = list(azs)
+
+    print(f"Updating manual AuNPS overlays in {len(azs)} active zones")
+    for az in azs:
+        with mrcfile.open(az, permissive=True) as mrc:
+            res_ddw = torch.tensor(mrc.data.copy())
+        az_data = np.load(az.with_suffix(".npy") ,allow_pickle=True)
+        az_id = str(az.with_suffix("")).split("_")[-1]
+        manual_aunp_filename = Path("aunps") / f"aunp_tm_BP_active_zone_{az_id}_manual.star"
+
+        if not manual_aunp_filename.exists():
+            print(f"Skipping active zone {az_id}, manual picks file not found: {manual_aunp_filename}")
+            continue
+
+        manual_aunp_data = starfile.read(manual_aunp_filename)
+        if len(manual_aunp_data) == 0:
+            print(f"Skipping active zone {az_id}, manual picks file is empty: {manual_aunp_filename}")
+            continue
+
+        fig = overlay_manual_aunps_update(manual_aunp_data, az_data, res_ddw, skip_segment_activezone)
+        diagnost_figure_filename = str(az.with_suffix(""))+"_selected_aunps_manual.png"
+        fig.savefig(diagnost_figure_filename)
+        print(f"Saved diagnostic image {diagnost_figure_filename}")
+
 @app.command()
 def manual_aunp_selection():
     from streamlit.web import cli

@@ -161,3 +161,5 @@ Thumbs.db
 assets/
 
 experiments/CJS_testing/
+experiments/warp_reconstuct_aunp_erase_fidder.py
+experiments/erase_aunp_relion.py
