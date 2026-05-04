@@ -1012,6 +1012,7 @@ def update_manual_aunp_picks(
     import mrcfile
     import numpy as np
     from findingampa.utils.analysis import overlay_manual_aunps_update
+    from findingampa.utils.tm3d import refine_aunp_peaks
 
     azs = Path("active_zonograms").glob("active_zonogram_*.mrc")
     azs = list(azs)
@@ -1032,6 +1033,15 @@ def update_manual_aunp_picks(
         if len(manual_aunp_data) == 0:
             print(f"Skipping active zone {az_id}, manual picks file is empty: {manual_aunp_filename}")
             continue
+        if "faTM_PeakX" not in manual_aunp_data.columns:
+            manual_aunp_data["faTM_PeakX"] = manual_aunp_data["faCoordinateX"]
+            manual_aunp_data["faTM_PeakY"] = manual_aunp_data["faCoordinateY"]
+            manual_aunp_data["faTM_PeakZ"] = manual_aunp_data["faCoordinateZ"]
+
+        manual_aunp_data = refine_aunp_peaks(manual_aunp_data)
+        refined_manual_aunp_filename = Path("aunps") / f"aunp_tm_BP_active_zone_{az_id}_manual_refined.star"
+        starfile.write(manual_aunp_data, refined_manual_aunp_filename)
+        print(f"Saved refined manual picks to {refined_manual_aunp_filename}")
 
         fig = overlay_manual_aunps_update(manual_aunp_data, az_data, res_ddw, skip_segment_activezone)
         diagnost_figure_filename = str(az.with_suffix(""))+"_selected_aunps_manual.png"
