@@ -86,15 +86,15 @@ async def ddw_aretomo(
     from subprocess import Popen, PIPE, DEVNULL, STDOUT
 
     print(f"Running DDW for {tomo_name}")
-    p = await asyncio.create_subprocess_shell(f"scp *EVN_Vol.mrc *ODD_Vol.mrc 10.137.46.10:/juliet/scratch/andecath/ddw_temp/", shell=True, cwd=folder,stdout=DEVNULL,stderr=STDOUT)
+    p = await asyncio.create_subprocess_shell(f"scp *EVN_Vol.mrc *ODD_Vol.mrc 10.137.46.14:/juliet/scratch/andecath/ddw_temp/", shell=True, cwd=folder,stdout=DEVNULL,stderr=STDOUT)
     await p.wait()
-    p = await asyncio.create_subprocess_shell(f"ssh 10.137.46.10 newstack -mu 1000000,0 /juliet/scratch/andecath/ddw_temp/{tomo_name}_EVN_Vol.mrc /juliet/scratch/andecath/ddw_temp/{tomo_name}_EVN_Vol.mrc ", shell=True,stdout=DEVNULL,stderr=STDOUT)
+    p = await asyncio.create_subprocess_shell(f"ssh 10.137.46.14 newstack -mu 1000000,0 /juliet/scratch/andecath/ddw_temp/{tomo_name}_EVN_Vol.mrc /juliet/scratch/andecath/ddw_temp/{tomo_name}_EVN_Vol.mrc ", shell=True,stdout=DEVNULL,stderr=STDOUT)
     await p.wait()
-    p = await asyncio.create_subprocess_shell(f"ssh 10.137.46.10 newstack -mu 1000000,0 /juliet/scratch/andecath/ddw_temp/{tomo_name}_ODD_Vol.mrc /juliet/scratch/andecath/ddw_temp/{tomo_name}_ODD_Vol.mrc ", shell=True,stdout=DEVNULL,stderr=STDOUT)
+    p = await asyncio.create_subprocess_shell(f"ssh 10.137.46.14 newstack -mu 1000000,0 /juliet/scratch/andecath/ddw_temp/{tomo_name}_ODD_Vol.mrc /juliet/scratch/andecath/ddw_temp/{tomo_name}_ODD_Vol.mrc ", shell=True,stdout=DEVNULL,stderr=STDOUT)
     await p.wait()
-    p = await asyncio.create_subprocess_shell(f"ssh 10.137.46.10 /juliet/scratch/andecath/DeepDeWedge/env/bin/ddw refine-tomogram --tomo0-files /juliet/scratch/andecath/ddw_temp/{tomo_name}_EVN_Vol.mrc  --tomo1-files /juliet/scratch/andecath/ddw_temp/{tomo_name}_ODD_Vol.mrc --subtomo-size 96 --mw-angle 84 --subtomo-overlap 32 --batch-size 10 --model-checkpoint-file /juliet/scratch/andecath/ddw_temp/epoch=409-val_loss=13.62301.ckpt --output-dir /juliet/scratch/andecath/ddw_temp/ --num-workers 10 --gpu 0", shell=True,stdout=DEVNULL,stderr=STDOUT)
+    p = await asyncio.create_subprocess_shell(f"ssh 10.137.46.14 /juliet/scratch/andecath/DeepDeWedge/env/bin/ddw refine-tomogram --tomo0-files /juliet/scratch/andecath/ddw_temp/{tomo_name}_EVN_Vol.mrc  --tomo1-files /juliet/scratch/andecath/ddw_temp/{tomo_name}_ODD_Vol.mrc --subtomo-size 96 --mw-angle 84 --subtomo-overlap 32 --batch-size 10 --model-checkpoint-file /juliet/scratch/andecath/ddw_temp/epoch=409-val_loss=13.62301.ckpt --output-dir /juliet/scratch/andecath/ddw_temp/ --num-workers 10 --gpu 0", shell=True,stdout=DEVNULL,stderr=STDOUT)
     await p.wait()
-    p = await asyncio.create_subprocess_shell(f"scp 10.137.46.10:/juliet/scratch/andecath/ddw_temp/{tomo_name}*_refined.mrc {tomo_name}_Vol_ddw.mrc", shell=True,cwd=folder,stdout=DEVNULL,stderr=STDOUT)
+    p = await asyncio.create_subprocess_shell(f"scp 10.137.46.14:/juliet/scratch/andecath/ddw_temp/{tomo_name}*_refined.mrc {tomo_name}_Vol_ddw.mrc", shell=True,cwd=folder,stdout=DEVNULL,stderr=STDOUT)
     await p.wait()
     print(f"Finished DDW {tomo_name}")
 
