@@ -262,7 +262,7 @@ def annotate_membranes():
         typer.echo("No rawtlt file found")
         raise typer.Exit()
     
-    MEMBRAIN_MODEL_PATH = FA_ASSETS / "membrain" / "MemBrain_seg_v10_alpha.ckpt"
+    MEMBRAIN_MODEL_PATH = FA_ASSETS / "membrain" / "MemBrain_seg_v10_0.ckpt"
 
     from membrain_seg.segmentation.segment import segment
 
@@ -312,7 +312,7 @@ def smooth_membranes(segmentation_file = None):
         except IndexError:
             typer.echo("No rawtlt file found")
             raise typer.Exit()
-        segmentation_file = Path(f"membrain/{tomo_name}_full_rec_BP_flat_MemBrain_seg_v10_alpha.ckpt_segmented.mrc")
+        segmentation_file = Path(f"membrain/{tomo_name}_full_rec_BP_flat_MemBrain_seg_v10_0.ckpt_segmented.mrc")
     from subprocess import Popen, PIPE
     pro1 = Popen(f"trimvol -c 0,1 {segmentation_file} membrain/scaled.mrc", stdout=PIPE, stderr=PIPE, shell=True)
     pro1.communicate()

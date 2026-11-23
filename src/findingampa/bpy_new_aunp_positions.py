@@ -210,7 +210,7 @@ if  should_setup:
     bpy.context.evaluated_depsgraph_get().update()
     
    
-    membrain = Path("membrain") / f"{path.name[:-4]}_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
+    membrain = Path("membrain") / f"{path.name[:-4]}_MemBrain_seg_v10_0.ckpt_segmented_smooth.mrc"
     flat_exists = False
     if membrain.exists():
         flat_exists = True
@@ -237,9 +237,9 @@ if  should_setup:
 
         bpy.context.evaluated_depsgraph_get().update()
 
-    membrain = Path("membrain") / f"{path.name[:-8]}3DCTF_BIN4_ddw_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
+    membrain = Path("membrain") / f"{path.name[:-8]}3DCTF_BIN4_ddw_MemBrain_seg_v10_0.ckpt_segmented_smooth.mrc"
     if not membrain.exists():
-        membrain = Path("membrain") / f"{path.name[:-8]}3DCTF_BIN4_denoised_MemBrain_seg_v10_alpha.ckpt_segmented_smooth.mrc"
+        membrain = Path("membrain") / f"{path.name[:-8]}3DCTF_BIN4_denoised_MemBrain_seg_v10_0.ckpt_segmented_smooth.mrc"
     if membrain.exists():
         membrain = mn.entities.density.ui.load(membrain.absolute(), invert=False,name="MemBrain")
         membrain_ident = "MN_density_MemBrain.001" if flat_exists else "MN_density_MemBrain"

@@ -309,7 +309,7 @@ if  should_setup:
         coords = np.loadtxt(pick)/10.0
         new_sp_object = mn.blender.obj.create_object(coords, collection=bpy.data.collections['SavedPicks'], name=pick.stem)
         #bpy.data.collections['SavedPicks'].objects.link(new_sp_object)
-    membrain = Path("membrain") / f"{path.name[:-4]}_MemBrain_seg_v10_alpha_ckpt_segmented_smooth.mrc"
+    membrain = Path("membrain") / f"{path.name[:-4]}_MemBrain_seg_v10_0.ckpt_segmented_smooth.mrc"
     if membrain.exists():
         membrain = mn.io.density.load(membrain.absolute(), invert=False)
         bpy.data.node_groups["MN_density_NewDensity"].nodes["MN_density_style_surface"].inputs[1].default_value = 125
