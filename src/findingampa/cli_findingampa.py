@@ -215,10 +215,11 @@ def ddw_aretomo(
     Popen(f"scp 10.137.46.14:/juliet/scratch/andecath/ddw_temp/{tomo_name}*_refined.mrc {tomo_name}_Vol_ddw.mrc", shell=True,cwd=folder,stdout=DEVNULL,stderr=STDOUT).wait()
     print(f"Finished DDW {tomo_name}")
 
-@app.command()
-def new_annotate_aunps(
+@app.command("blender-annotate-membranes")
+def blender_annotate_membranes(
     reset: bool = False
 ):
+    """Open Blender to annotate pre/postsynaptic membranes on the tomogram."""
     from findingampa.utils.assets import FA_ASSETS
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
@@ -247,8 +248,21 @@ def new_annotate_aunps(
         should_setup = True
 
     import os
+    # Prefer BIN4 for Blender display; flat is optional legacy fallback.
+    tomogram_candidates = [
+        Path(f"{tomo_name}_full_rec_BP_3DCTF_BIN4.mrc"),
+        Path(f"{tomo_name}_full_rec_BP_flat.mrc"),
+    ]
+    tomogram_path = next((p for p in tomogram_candidates if p.exists()), None)
+    if tomogram_path is None:
+        typer.echo(
+            f"No tomogram found. Expected one of: "
+            f"{', '.join(str(p) for p in tomogram_candidates)}"
+        )
+        raise typer.Exit()
+
     print(should_setup)
-    os.system(f"{BLENDER_PATH} {aunp_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_new_aunp_positions.py'} -- --tomogram {tomo_name}_full_rec_BP_flat.mrc {'--setup' if should_setup else ''} --findingampa {Path(__file__).parent.parent}")   
+    os.system(f"{BLENDER_PATH} {aunp_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_new_aunp_positions.py'} -- --tomogram {tomogram_path} {'--setup' if should_setup else ''} --findingampa {Path(__file__).parent.parent}")   
 
 
 
