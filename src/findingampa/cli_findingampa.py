@@ -731,13 +731,13 @@ def match_aunps(
     }
 
     locations_tomo, locations_score_volume, score_volume = calc_3dtm(Path(tomo_name+tomo_suffix[tomotype]), high_pass=high_pass)
-    score_volume = torch.tensor(score_volume).cuda()
-    fitted_params_list = fit_gaussian_3d_list(torch.tensor(score_volume), locations_score_volume.cuda(),12)
+    score_volume = torch.as_tensor(score_volume, dtype=torch.float32).cuda()
+    fitted_params_list = fit_gaussian_3d_list(score_volume, locations_score_volume.float().cuda(), 12)
     offsets = torch.tensor([[f['x0'], f['y0'], f['z0']] for f in fitted_params_list])
     with mrcfile.open(tomo_name+tomo_suffix[tomotype_refine], permissive=True) as f:
-        tomo_tensor = torch.tensor(f.data)
+        tomo_tensor = torch.as_tensor(f.data, dtype=torch.float32)
 
-    tomo_fitted_params_list = fit_gaussian_3d_list(tomo_tensor.cuda(), locations_tomo.int().cuda(), 8, sign=-1)
+    tomo_fitted_params_list = fit_gaussian_3d_list(tomo_tensor.cuda(), locations_tomo.float().cuda(), 8, sign=-1)
 
     d1, d2 = find_surfaces(locations_tomo.cpu().numpy())
 

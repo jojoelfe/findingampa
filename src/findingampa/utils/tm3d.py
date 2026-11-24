@@ -50,6 +50,8 @@ def calc_3dtm(tomo, high_pass=None):
     score_volume, angle_volume = run_job_parallel(
         job, (2,2,2), [0]
     )
+    # Newer pytom builds may return float16 scores; keep float32 for downstream torch fits.
+    score_volume = np.asarray(score_volume, dtype=np.float32)
     #mrcfile.write(f"/scratch/pompeii/elferich/gouaux_tomo/ProcessingJE/AuNP_TM/{tomo.name.removesuffix('.mrc')}_score.mrc", score_volume.T, overwrite=True, voxel_size=10.0)
     peaks = peak_local_max(score_volume, min_distance=2, threshold_abs=0.3, exclude_border=10)
 
@@ -81,8 +83,11 @@ class Gaussian3DList(nn.Module):
 def fit_gaussian_3d_list(score_volume, locations, boxsize, sign=1):
     from torch_subpixel_crop import subpixel_crop_3d
 
+    # Avoid Half/Float mismatches from mixed-precision TM / crop outputs.
+    score_volume = score_volume.float()
+    locations = locations.float()
     num_gaussians = len(locations)
-    model = Gaussian3DList(num_gaussians,sign=sign).to(score_volume.device)
+    model = Gaussian3DList(num_gaussians,sign=sign).to(device=score_volume.device, dtype=torch.float32)
     optimizer = optim.Adam(model.parameters(), lr=0.01)
     criterion = nn.MSELoss()
 
@@ -93,7 +98,7 @@ def fit_gaussian_3d_list(score_volume, locations, boxsize, sign=1):
     #    region = score_volume[x-boxsize//2:x+boxsize//2+1, y-boxsize//2:y+boxsize//2+1, z-boxsize//2:z+boxsize//2+1]
         
     #    boxes.append(region)
-    boxes = subpixel_crop_3d(score_volume, locations, boxsize)
+    boxes = subpixel_crop_3d(score_volume, locations, boxsize).float()
     #boxes = torch.stack(boxes).to(score_volume.device)  # Shape: (num_gaussians, boxsize, boxsize, boxsize)
 
     # Prepare the coordinates
