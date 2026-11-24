@@ -238,13 +238,13 @@ def blender_annotate_membranes(
     aunp_folder.mkdir(parents=True, exist_ok=True)
     annotated_membranes_folder = Path("annotated_membranes")
     annotated_membranes_folder.mkdir(parents=True, exist_ok=True)
-    instance_template_file = aunp_folder / "new_aunp_template.blend"
-    #Copy template file into aunp_folder
+    instance_template_file = aunp_folder / f"{tomo_name}_MemsAnn.blend"
+    # Copy packaged template into the per-tomogram membrane annotation session file
     import shutil
     if instance_template_file.exists() and not reset:
         should_setup = False
     else:
-        shutil.copy(template_file, aunp_folder)
+        shutil.copy(template_file, instance_template_file)
         should_setup = True
 
     import os
@@ -262,7 +262,7 @@ def blender_annotate_membranes(
         raise typer.Exit()
 
     print(should_setup)
-    os.system(f"{BLENDER_PATH} {aunp_folder / template_file.name}  -P {Path(__file__).parent / 'bpy_new_aunp_positions.py'} -- --tomogram {tomogram_path} {'--setup' if should_setup else ''} --findingampa {Path(__file__).parent.parent}")   
+    os.system(f"{BLENDER_PATH} {instance_template_file}  -P {Path(__file__).parent / 'bpy_new_aunp_positions.py'} -- --tomogram {tomogram_path} {'--setup' if should_setup else ''} --findingampa {Path(__file__).parent.parent}")   
 
 
 
@@ -917,7 +917,7 @@ def render_active_zonograms():
 
         fig.savefig(active_zonogram_folder / f"active_zonogram_{i}.png")
 
-        render_active_zone_extend_via_blender(str(Path.cwd() / "aunps/new_aunp_template_CJS_ddw.blend"), az[1], np.array(az[2].shape)[::-1], az[0], active_zonogram_folder / f"active_zonogram_{i}_position.png")
+        render_active_zone_extend_via_blender(str(Path.cwd() / "aunps" / f"{tomo_name}_MemsAnn.blend"), az[1], np.array(az[2].shape)[::-1], az[0], active_zonogram_folder / f"active_zonogram_{i}_position.png")
 
 @app.command()
 def create_manual_active_zone():
@@ -935,7 +935,7 @@ def create_manual_active_zone():
         typer.echo("Blender not found")
         raise typer.Exit()
     
-    instance_template_file = str(Path.cwd() / "aunps/new_aunp_template_CJS_ddw.blend")
+    instance_template_file = str(Path.cwd() / "aunps" / f"{tomo_name}_MemsAnn.blend")
    
     os.system(f"{BLENDER_PATH} {instance_template_file}  -P {Path(__file__).parent / 'bpy_manual_active_zone.py'} --  --findingampa {Path(__file__).parent.parent}")   
 
