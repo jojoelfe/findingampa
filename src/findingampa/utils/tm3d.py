@@ -9,6 +9,7 @@ import torch.optim as optim
 def calc_3dtm(tomo, high_pass=None):
     from pytom_tm.tmjob import TMJob
     from pytom_tm.parallel import run_job_parallel
+    from pytom_tm.dataclass import TiltSeriesMetaData
     from findingampa.utils.assets import FA_ASSETS
     from pathlib import Path
     from skimage.feature import peak_local_max
@@ -16,6 +17,12 @@ def calc_3dtm(tomo, high_pass=None):
 
     tmfolder = Path('./') / "TM"
     tmfolder.mkdir(exist_ok=True)
+    # Newer pytom-match-pick requires tilt geometry via TiltSeriesMetaData
+    # instead of the old tilt_angles=/tilt_weighting=/ctf_data= kwargs.
+    ts_metadata = TiltSeriesMetaData(
+        tilt_angles=[-48.0, 48.0],
+        per_tilt_weighting=False,
+    )
     job = TMJob(
         "0",
         20,
@@ -23,10 +30,9 @@ def calc_3dtm(tomo, high_pass=None):
         FA_ASSETS / "templates" / "aunp01" / "temaplte.mrc",
         FA_ASSETS / "templates" / "aunp01" / "mask.mrc",
         tmfolder,
+        ts_metadata,
         angle_increment=str(FA_ASSETS / "templates" / "aunp01" / "angles.txt"),
         mask_is_spherical=True,
-        tilt_angles=[-48,48],
-        tilt_weighting=None,
         search_x=None,
         search_y=None,
         search_z=None,
@@ -34,8 +40,6 @@ def calc_3dtm(tomo, high_pass=None):
         voxel_size=10.0,
         low_pass=None,
         high_pass=high_pass,
-        dose_accumulation=None,
-        ctf_data=None,
         whiten_spectrum=True,
         rotational_symmetry=1,
         particle_diameter=None,
