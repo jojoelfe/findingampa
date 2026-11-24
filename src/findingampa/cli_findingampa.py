@@ -711,7 +711,7 @@ def match_aunps(
  
 
     tomo_suffix = {
-        Tomotype.BP: "_full_rec_BP_flat.mrc",
+        Tomotype.BP: "_full_rec_BP_3DCTF_BIN4.mrc",
         Tomotype.DDW: "_full_rec_BP_3DCTF_BIN4_ddw.mrc",
         Tomotype.CTF3D: "_full_rec_BP_3DCTF_BIN4.mrc"
     }
