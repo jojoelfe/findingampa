@@ -145,19 +145,22 @@ def refine_aunp_peaks(star_data):
     with mrcfile.open(mrcs[0], 'r') as mrc:
         tomo_data = torch.tensor(mrc.data).to("cuda:0")
     peak_data = torch.tensor(star_data[['faTM_PeakZ', 'faTM_PeakY', 'faTM_PeakX']].values,dtype=torch.float32).to("cuda:0")
+    # torch-find-peaks dropped center_regularization / *_consistency kwargs;
+    # current API returns amplitude/z/y/x/sigmas (no per-peak loss or background).
     refined_peak_data = refine_peaks_3d(
-        volume = -1. * tomo_data,
-        peak_coords= peak_data,
+        volume=-1. * tomo_data,
+        peak_coords=peak_data,
         return_as="diagnostic",
         boxsize=6,
         learning_rate=0.001,
-        center_regularization=0.001,
-        amplitude_consistency= 0.000000,
-        sigma_consistency= 0.000000,
-        background_consistency=0.000000,
-        max_iterations=1000
+        max_iterations=1000,
     )
     rdp = refined_peak_data['refined_peaks']
+    boxes = refined_peak_data['boxes']
+    output = refined_peak_data['output']
+    # Per-peak MSE from diagnostic boxes vs fitted Gaussians
+    peak_loss = ((boxes - output) ** 2).mean(dim=tuple(range(1, boxes.ndim))).detach().cpu().numpy()
+
     star_data['faCoordinateX'] = rdp['x']
     star_data['faCoordinateY'] = rdp['y']
     star_data['faCoordinateZ'] = rdp['z']
@@ -165,8 +168,8 @@ def refine_aunp_peaks(star_data):
     star_data['faTomo_gaussianFitSigmaX'] = rdp['sigma_x']
     star_data['faTomo_gaussianFitSigmaY'] = rdp['sigma_y']
     star_data['faTomo_gaussianFitSigmaZ'] = rdp['sigma_z']
-    star_data['faTomo_gaussianFitLoss'] = rdp['loss']
-    star_data['faTomo_gaussianFitBackground'] = -rdp['background']
+    star_data['faTomo_gaussianFitLoss'] = peak_loss
+    star_data['faTomo_gaussianFitBackground'] = 0.0
     star_data['faTomo_gaussianFitX'] = star_data['faTM_PeakX'] - rdp['x']
     star_data['faTomo_gaussianFitY'] = star_data['faTM_PeakY'] - rdp['y']
     star_data['faTomo_gaussianFitZ'] = star_data['faTM_PeakZ'] - rdp['z']
