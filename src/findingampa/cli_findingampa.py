@@ -968,9 +968,19 @@ def select_aunp_picks(
     import mrcfile
     import numpy as np
     from imodmodel import ImodModel
-    from imodmodel.models import Object
+    from imodmodel.models import Contour, Object, ObjectFlags, ObjectHeader
     from findingampa.utils.analysis import select_aunps_update
     from findingampa.utils.tm3d import refine_aunp_peaks
+
+    def scattered_object(points, color):
+        pts = np.asarray(points, dtype=float).reshape(-1, 3)
+        contours = [Contour(points=pts)] if len(pts) else []
+        return Object(
+            color=color,
+            header=ObjectHeader(flags=ObjectFlags(scattered=True)),
+            contours=contours,
+        )
+
     try:
         tomo_name = list(Path.cwd().glob("*.rawtlt"))[0].stem
     except IndexError:
@@ -1011,32 +1021,28 @@ def select_aunp_picks(
         filename = az_pick_filename[:-4] + f"_{az_id}.star"
         starfile.write(data_structure.loc[az_picks[i]], filename)
         print(f"Saved picks to {filename}")
-        model.objects.append(Object.new_scattered_points(points=selected_aunp_pos[az_picks[i]]+np.array([0.5,0.5,0.0])))
-        model.objects[-1].header.red = 1.0 - i *0.3
-        model.objects[-1].header.green = 0 + i*0.2
-        model.objects[-1].header.blue = 0 + i*0.2
+        model.objects.append(scattered_object(
+            selected_aunp_pos[az_picks[i]] + np.array([0.5, 0.5, 0.0]),
+            color=(1.0 - i * 0.3, i * 0.2, i * 0.2),
+        ))
     for i, postsyn in enumerate(postsyn_picks):
         data_structure.loc[postsyn, "postsynapse"] = True
     
-    model.objects.append(Object.new_scattered_points(points=selected_aunp_pos[np.logical_and(
-        data_structure["active_zone"] == -1,
-        data_structure["postsynapse"] == True
-    )]+np.array([0.5,0.5,0.0])))
-    model.objects[-1].header.red = 0
-    model.objects[-1].header.green = 1.0
-    model.objects[-1].header.blue = 0
-    
-    
-    
-    
-    
-    model.objects.append(Object.new_scattered_points(points=selected_aunp_pos[np.logical_and(
-        data_structure["active_zone"] == -1,
-        data_structure["postsynapse"] == False
-    )]+np.array([0.5,0.5,0.0])))
-    model.objects[-1].header.red = 0
-    model.objects[-1].header.green = 0
-    model.objects[-1].header.blue = 1.0
+    model.objects.append(scattered_object(
+        selected_aunp_pos[np.logical_and(
+            data_structure["active_zone"] == -1,
+            data_structure["postsynapse"] == True
+        )] + np.array([0.5, 0.5, 0.0]),
+        color=(0.0, 1.0, 0.0),
+    ))
+
+    model.objects.append(scattered_object(
+        selected_aunp_pos[np.logical_and(
+            data_structure["active_zone"] == -1,
+            data_structure["postsynapse"] == False
+        )] + np.array([0.5, 0.5, 0.0]),
+        color=(0.0, 0.0, 1.0),
+    ))
 
     model.to_file(az_pick_filename)
     #starfile.write(az_picks, az_pick_filename)
