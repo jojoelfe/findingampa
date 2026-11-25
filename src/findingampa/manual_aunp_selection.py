@@ -48,7 +48,7 @@ else:
     plane2_elimination = False
     plane2_distance_cutoff = 5.0
 
-@st.cache
+@st.cache_resource
 def load_tomogram(az):
     with mrcfile.open(az, permissive=True) as mrc:
         res_ddw = torch.tensor(mrc.data.copy())
