@@ -238,8 +238,8 @@ def blender_annotate_membranes(
     aunp_folder.mkdir(parents=True, exist_ok=True)
     annotated_membranes_folder = Path("annotated_membranes")
     annotated_membranes_folder.mkdir(parents=True, exist_ok=True)
-    instance_template_file = aunp_folder / f"{tomo_name}_MemsAnn.blend"
-    # Copy packaged template into the per-tomogram membrane annotation session file
+    # Working session during annotation; user should Save As aunps/{tomo}_MemsAnn.blend when done.
+    instance_template_file = aunp_folder / "new_aunp_template.blend"
     import shutil
     if instance_template_file.exists() and not reset:
         should_setup = False
@@ -262,6 +262,10 @@ def blender_annotate_membranes(
         raise typer.Exit()
 
     print(should_setup)
+    print(
+        f"When finished, Save As: aunps/{tomo_name}_MemsAnn.blend "
+        "(required by later steps)"
+    )
     os.system(f"{BLENDER_PATH} {instance_template_file}  -P {Path(__file__).parent / 'bpy_new_aunp_positions.py'} -- --tomogram {tomogram_path} {'--setup' if should_setup else ''} --findingampa {Path(__file__).parent.parent}")   
 
 
@@ -917,7 +921,14 @@ def render_active_zonograms():
 
         fig.savefig(active_zonogram_folder / f"active_zonogram_{i}.png")
 
-        render_active_zone_extend_via_blender(str(Path.cwd() / "aunps" / f"{tomo_name}_MemsAnn.blend"), az[1], np.array(az[2].shape)[::-1], az[0], active_zonogram_folder / f"active_zonogram_{i}_position.png")
+        mems_ann_blend = Path.cwd() / "aunps" / f"{tomo_name}_MemsAnn.blend"
+        if not mems_ann_blend.exists():
+            typer.echo(
+                f"Missing {mems_ann_blend}. After blender-annotate-membranes, "
+                f"Save As that filename before render-active-zonograms."
+            )
+            raise typer.Exit()
+        render_active_zone_extend_via_blender(str(mems_ann_blend), az[1], np.array(az[2].shape)[::-1], az[0], active_zonogram_folder / f"active_zonogram_{i}_position.png")
 
 @app.command()
 def create_manual_active_zone():
@@ -935,7 +946,13 @@ def create_manual_active_zone():
         typer.echo("Blender not found")
         raise typer.Exit()
     
-    instance_template_file = str(Path.cwd() / "aunps" / f"{tomo_name}_MemsAnn.blend")
+    instance_template_file = Path.cwd() / "aunps" / f"{tomo_name}_MemsAnn.blend"
+    if not instance_template_file.exists():
+        typer.echo(
+            f"Missing {instance_template_file}. After blender-annotate-membranes, "
+            f"Save As that filename before create-manual-active-zone."
+        )
+        raise typer.Exit()
    
     os.system(f"{BLENDER_PATH} {instance_template_file}  -P {Path(__file__).parent / 'bpy_manual_active_zone.py'} --  --findingampa {Path(__file__).parent.parent}")   
 
