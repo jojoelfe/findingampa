@@ -6,6 +6,7 @@ from bpy.types import (Panel, Operator)
 import sys
 sys.path.append('/groups/elferich/Documents/MolecularNodes/')
 sys.path.append('/goliath/processing/Gouaux/CJS/GitHub/MolecularNodes')
+sys.path.append(str(__import__("pathlib").Path.home() / "software" / "MolecularNodes"))
 sys.path.append(sys.argv[sys.argv.index("--findingampa") + 1])
 
 
